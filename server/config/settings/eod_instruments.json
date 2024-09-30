@@ -1,0 +1,12 @@
+{
+    "exchange": "FOREX",
+    "fmt": "json",
+    "data_point": "close",
+    "periods": ["5m", "1h", "d", "w", "m"],
+    "cross_rates": [
+        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF", "USDCAD", "NZDUSD",
+        "EURGBP", "EURJPY", "EURAUD", "EURCHF", "EURCAD", "EURNZD", "GBPJPY",
+        "GBPAUD", "GBPCHF", "GBPCAD", "GBPNZD", "AUDJPY", "AUDCHF", "AUDCAD",
+        "AUDNZD", "CHFJPY", "CADJPY", "NZDJPY", "CADCHF", "NZDCHF", "NZDCAD"
+    ]
+}
