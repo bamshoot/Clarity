@@ -1,4 +1,5 @@
 import requests
+from models.EODCandle import EODCandle
 
 
 class EODData:
@@ -10,7 +11,10 @@ class EODData:
         self.exchange = exchange
         self.fmt = fmt
 
-    def get_candles(self, ticker, exchange, interval, fmt):
+    def parse_candle_data(self, data: dict) -> EODCandle:
+        return EODCandle(**data)
+
+    def get_candles(self, ticker: str, exchange: str, interval: str, fmt: str):
         endpoint = "eod" if interval in ["d", "w", "m"] else "intraday"
         params = {
             "period" if endpoint == "eod" else "interval": interval,
@@ -22,4 +26,5 @@ class EODData:
         response = self.session.get(url, params=params)
         response.raise_for_status()
 
-        return response.json()
+        raw_data = response.json()
+        return [self.parse_candle_data(candle) for candle in raw_data]
