@@ -1,5 +1,5 @@
 import httpx
-from models.EODCandle import EODCandle
+from schemas.EODCandle import EODCandle
 
 
 class EODData:
@@ -34,4 +34,3 @@ class EODData:
 
         raw_data = response.json()
         return [self.parse_candle_data(candle) for candle in raw_data]
-        # return raw_data
