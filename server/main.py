@@ -3,21 +3,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers import main_router, eod_router
 import uvicorn
 from config.config import Config
-from contollers.chrono import Chrono
+from contollers.chrono import DataCollectionChrono
 from contextlib import asynccontextmanager
+from services.eod_data import EODData
 
 config = Config()
+
+EODData = EODData(config.EOD_URL, config.EOD_API_KEY)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.chrono = Chrono(interval=10)
-    app.state.chrono.start()
+    app.state.data_collection_chrono = DataCollectionChrono(EODData, interval=300)
+    app.state.data_collection_chrono.start()
     yield
-    app.state.chrono.stop()
+    app.state.data_collection_chrono.stop(timeout=10)
 
 
 app = FastAPI(lifespan=lifespan)
+# app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,

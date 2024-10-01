@@ -13,8 +13,6 @@ async def get_candles(
     async with EODData(
         base_url=config.EOD_URL,
         api_key=config.EOD_API_KEY,
-        exchange=config.EOD_INSTRUMENTS["exchange"],
-        fmt=config.EOD_INSTRUMENTS["fmt"],
     ) as eod_api:
         candles = await eod_api.get_candles(ticker, exchange, interval, fmt)
         return response_handler(candles, "Error getting candles")

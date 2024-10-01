@@ -1,0 +1,427 @@
+2024-10-01 14:47:02 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 14:47:02 Current time: 2024-10-01 14:47:02
+2024-10-01 14:47:12 Current time: 2024-10-01 14:47:12
+2024-10-01 14:47:22 Current time: 2024-10-01 14:47:22
+2024-10-01 14:50:10 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 14:50:10 Current time on data collection: 2024-10-01 14:50:10
+2024-10-01 14:50:20 Current time on data collection: 2024-10-01 14:50:20
+2024-10-01 14:50:30 Current time on data collection: 2024-10-01 14:50:30
+2024-10-01 15:51:39 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 15:51:55 data_collection_chrono is not running
+2024-10-01 16:00:35 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 16:00:38 Failed to save data: 'ticker'
+2024-10-01 16:01:41 Failed to save data: 'ticker'
+2024-10-01 16:03:29 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 16:03:32 Failed to save data: 'ticker'
+2024-10-01 16:05:19 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 16:05:24 Failed to save data: 'ticker'
+2024-10-01 16:06:25 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 16:06:28 Failed to save data: 'ticker'
+2024-10-01 16:09:52 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 16:09:55 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 16:11:45 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 16:11:48 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 16:12:50 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 16:47:03 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 16:47:06 First dt: 2024-06-04 00:00:00, Last dt: 2024-10-01 01:02:00
+2024-10-01 16:47:06 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 16:48:08 First dt: 2024-06-04 00:00:00, Last dt: 2024-10-01 01:02:00
+2024-10-01 16:48:08 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 16:56:22 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 16:56:24 Failed to save data: module 'pyarrow' has no attribute 'json'
+2024-10-01 17:01:40 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:01:42 Attribute error: module 'pyarrow' has no attribute 'read_json'
+2024-10-01 17:07:11 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:07:16 Failed to save data: a bytes-like object is required, not 'str'
+2024-10-01 17:12:49 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:12:51 Failed to save data: a bytes-like object is required, not 'str'
+2024-10-01 17:14:42 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:14:45 Arrow Invalid Error: straddling object straddles two block boundaries (try to increase block size?)
+2024-10-01 17:16:09 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:16:11 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 17:17:13 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 17:25:27 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:25:29 Unexpected error in data collection: save_json_to_parquet() missing 1 required positional argument: 'file_path'
+2024-10-01 17:27:51 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:33:30 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:35:33 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:35:35 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 17:39:43 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:39:46 Unexpected error in data collection: DataCollectionChrono._save_json_to_parquet() takes 3 positional arguments but 4 were given
+2024-10-01 17:40:18 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:40:20 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 17:43:13 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:43:15 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 17:44:17 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 17:52:10 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 17:52:12 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 17:53:15 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 18:09:00 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 18:09:03 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 18:16:08 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 18:16:10 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 18:16:12 Data saved to data/EOD/GBPUSD_5m.parquet
+2024-10-01 18:16:14 Data saved to data/EOD/USDJPY_5m.parquet
+2024-10-01 18:16:16 Data saved to data/EOD/AUDUSD_5m.parquet
+2024-10-01 18:16:18 Data saved to data/EOD/USDCHF_5m.parquet
+2024-10-01 18:16:19 Data saved to data/EOD/USDCAD_5m.parquet
+2024-10-01 18:16:21 Data saved to data/EOD/NZDUSD_5m.parquet
+2024-10-01 18:16:22 Data saved to data/EOD/EURGBP_5m.parquet
+2024-10-01 18:16:24 Data saved to data/EOD/EURJPY_5m.parquet
+2024-10-01 18:16:26 Data saved to data/EOD/EURAUD_5m.parquet
+2024-10-01 18:16:27 Data saved to data/EOD/EURCHF_5m.parquet
+2024-10-01 18:16:29 Data saved to data/EOD/EURCAD_5m.parquet
+2024-10-01 18:16:31 Data saved to data/EOD/EURNZD_5m.parquet
+2024-10-01 18:16:32 Data saved to data/EOD/GBPJPY_5m.parquet
+2024-10-01 18:16:34 Data saved to data/EOD/GBPAUD_5m.parquet
+2024-10-01 18:16:36 Data saved to data/EOD/GBPCHF_5m.parquet
+2024-10-01 18:16:38 Data saved to data/EOD/GBPCAD_5m.parquet
+2024-10-01 18:16:40 Data saved to data/EOD/GBPNZD_5m.parquet
+2024-10-01 18:16:42 Data saved to data/EOD/AUDJPY_5m.parquet
+2024-10-01 18:16:44 Data saved to data/EOD/AUDCHF_5m.parquet
+2024-10-01 18:16:46 Data saved to data/EOD/AUDCAD_5m.parquet
+2024-10-01 18:16:47 Data saved to data/EOD/AUDNZD_5m.parquet
+2024-10-01 18:16:49 Data saved to data/EOD/CHFJPY_5m.parquet
+2024-10-01 18:16:51 Data saved to data/EOD/CADJPY_5m.parquet
+2024-10-01 18:16:53 Data saved to data/EOD/NZDJPY_5m.parquet
+2024-10-01 18:16:55 Data saved to data/EOD/CADCHF_5m.parquet
+2024-10-01 18:16:56 Data saved to data/EOD/NZDCHF_5m.parquet
+2024-10-01 18:16:57 Data saved to data/EOD/NZDCAD_5m.parquet
+2024-10-01 18:18:00 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 18:18:01 Data saved to data/EOD/GBPUSD_5m.parquet
+2024-10-01 18:18:03 Data saved to data/EOD/USDJPY_5m.parquet
+2024-10-01 18:18:05 Data saved to data/EOD/AUDUSD_5m.parquet
+2024-10-01 18:18:06 Data saved to data/EOD/USDCHF_5m.parquet
+2024-10-01 18:18:08 Data saved to data/EOD/USDCAD_5m.parquet
+2024-10-01 18:18:10 Data saved to data/EOD/NZDUSD_5m.parquet
+2024-10-01 18:18:11 Data saved to data/EOD/EURGBP_5m.parquet
+2024-10-01 18:18:13 Data saved to data/EOD/EURJPY_5m.parquet
+2024-10-01 18:18:14 Data saved to data/EOD/EURAUD_5m.parquet
+2024-10-01 18:18:16 Data saved to data/EOD/EURCHF_5m.parquet
+2024-10-01 18:18:17 Data saved to data/EOD/EURCAD_5m.parquet
+2024-10-01 18:18:18 Data saved to data/EOD/EURNZD_5m.parquet
+2024-10-01 18:18:20 Data saved to data/EOD/GBPJPY_5m.parquet
+2024-10-01 18:18:22 Data saved to data/EOD/GBPAUD_5m.parquet
+2024-10-01 18:18:23 Data saved to data/EOD/GBPCHF_5m.parquet
+2024-10-01 18:18:25 Data saved to data/EOD/GBPCAD_5m.parquet
+2024-10-01 18:18:27 Data saved to data/EOD/GBPNZD_5m.parquet
+2024-10-01 18:18:28 Data saved to data/EOD/AUDJPY_5m.parquet
+2024-10-01 18:18:30 Data saved to data/EOD/AUDCHF_5m.parquet
+2024-10-01 18:18:32 Data saved to data/EOD/AUDCAD_5m.parquet
+2024-10-01 18:18:34 Data saved to data/EOD/AUDNZD_5m.parquet
+2024-10-01 18:18:35 Data saved to data/EOD/CHFJPY_5m.parquet
+2024-10-01 18:18:37 Data saved to data/EOD/CADJPY_5m.parquet
+2024-10-01 18:18:39 Data saved to data/EOD/NZDJPY_5m.parquet
+2024-10-01 18:18:40 Data saved to data/EOD/CADCHF_5m.parquet
+2024-10-01 18:18:43 Data saved to data/EOD/NZDCHF_5m.parquet
+2024-10-01 18:18:44 Data saved to data/EOD/NZDCAD_5m.parquet
+2024-10-01 18:25:21 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 18:25:26 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 18:25:30 Data saved to data/EOD/GBPUSD_5m.parquet
+2024-10-01 18:25:34 Data saved to data/EOD/USDJPY_5m.parquet
+2024-10-01 18:25:38 Data saved to data/EOD/AUDUSD_5m.parquet
+2024-10-01 18:25:42 Data saved to data/EOD/USDCHF_5m.parquet
+2024-10-01 18:25:45 Data saved to data/EOD/USDCAD_5m.parquet
+2024-10-01 18:25:48 Data saved to data/EOD/NZDUSD_5m.parquet
+2024-10-01 18:25:52 Data saved to data/EOD/EURGBP_5m.parquet
+2024-10-01 18:25:55 Data saved to data/EOD/EURJPY_5m.parquet
+2024-10-01 18:25:59 Data saved to data/EOD/EURAUD_5m.parquet
+2024-10-01 18:26:02 Data saved to data/EOD/EURCHF_5m.parquet
+2024-10-01 18:26:06 Data saved to data/EOD/EURCAD_5m.parquet
+2024-10-01 18:26:09 Data saved to data/EOD/EURNZD_5m.parquet
+2024-10-01 18:26:13 Data saved to data/EOD/GBPJPY_5m.parquet
+2024-10-01 18:26:17 Data saved to data/EOD/GBPAUD_5m.parquet
+2024-10-01 18:26:20 Data saved to data/EOD/GBPCHF_5m.parquet
+2024-10-01 18:26:24 Data saved to data/EOD/GBPCAD_5m.parquet
+2024-10-01 18:26:28 Data saved to data/EOD/GBPNZD_5m.parquet
+2024-10-01 18:26:31 Data saved to data/EOD/AUDJPY_5m.parquet
+2024-10-01 18:26:34 Data saved to data/EOD/AUDCHF_5m.parquet
+2024-10-01 18:26:38 Data saved to data/EOD/AUDCAD_5m.parquet
+2024-10-01 18:26:41 Data saved to data/EOD/AUDNZD_5m.parquet
+2024-10-01 18:26:45 Data saved to data/EOD/CHFJPY_5m.parquet
+2024-10-01 18:26:49 Data saved to data/EOD/CADJPY_5m.parquet
+2024-10-01 18:26:52 Data saved to data/EOD/NZDJPY_5m.parquet
+2024-10-01 18:26:55 Data saved to data/EOD/CADCHF_5m.parquet
+2024-10-01 18:26:59 Data saved to data/EOD/NZDCHF_5m.parquet
+2024-10-01 18:27:02 Data saved to data/EOD/NZDCAD_5m.parquet
+2024-10-01 18:29:54 Logger init() ./logs/data_collection_chrono.log
+2024-10-01 18:29:56 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 18:29:57 Data saved to data/EOD/EURUSD_1h.parquet
+2024-10-01 18:29:57 Data saved to data/EOD/EURUSD_d.parquet
+2024-10-01 18:29:58 Data saved to data/EOD/EURUSD_w.parquet
+2024-10-01 18:29:58 Data saved to data/EOD/EURUSD_m.parquet
+2024-10-01 18:30:00 Data saved to data/EOD/GBPUSD_5m.parquet
+2024-10-01 18:30:00 Data saved to data/EOD/GBPUSD_1h.parquet
+2024-10-01 18:30:01 Data saved to data/EOD/GBPUSD_d.parquet
+2024-10-01 18:30:01 Data saved to data/EOD/GBPUSD_w.parquet
+2024-10-01 18:30:02 Data saved to data/EOD/GBPUSD_m.parquet
+2024-10-01 18:30:05 Data saved to data/EOD/USDJPY_5m.parquet
+2024-10-01 18:30:05 Data saved to data/EOD/USDJPY_1h.parquet
+2024-10-01 18:30:06 Data saved to data/EOD/USDJPY_d.parquet
+2024-10-01 18:30:06 Data saved to data/EOD/USDJPY_w.parquet
+2024-10-01 18:30:07 Data saved to data/EOD/USDJPY_m.parquet
+2024-10-01 18:30:09 Data saved to data/EOD/AUDUSD_5m.parquet
+2024-10-01 18:30:09 Data saved to data/EOD/AUDUSD_1h.parquet
+2024-10-01 18:30:10 Data saved to data/EOD/AUDUSD_d.parquet
+2024-10-01 18:30:11 Data saved to data/EOD/AUDUSD_w.parquet
+2024-10-01 18:30:12 Data saved to data/EOD/AUDUSD_m.parquet
+2024-10-01 18:30:14 Data saved to data/EOD/USDCHF_5m.parquet
+2024-10-01 18:30:14 Data saved to data/EOD/USDCHF_1h.parquet
+2024-10-01 18:30:15 Data saved to data/EOD/USDCHF_d.parquet
+2024-10-01 18:30:15 Data saved to data/EOD/USDCHF_w.parquet
+2024-10-01 18:30:16 Data saved to data/EOD/USDCHF_m.parquet
+2024-10-01 18:30:18 Data saved to data/EOD/USDCAD_5m.parquet
+2024-10-01 18:30:18 Data saved to data/EOD/USDCAD_1h.parquet
+2024-10-01 18:30:19 Data saved to data/EOD/USDCAD_d.parquet
+2024-10-01 18:30:19 Data saved to data/EOD/USDCAD_w.parquet
+2024-10-01 18:30:20 Data saved to data/EOD/USDCAD_m.parquet
+2024-10-01 18:30:22 Data saved to data/EOD/NZDUSD_5m.parquet
+2024-10-01 18:30:22 Data saved to data/EOD/NZDUSD_1h.parquet
+2024-10-01 18:30:22 Data saved to data/EOD/NZDUSD_d.parquet
+2024-10-01 18:30:23 Data saved to data/EOD/NZDUSD_w.parquet
+2024-10-01 18:30:23 Data saved to data/EOD/NZDUSD_m.parquet
+2024-10-01 18:30:25 Data saved to data/EOD/EURGBP_5m.parquet
+2024-10-01 18:30:25 Data saved to data/EOD/EURGBP_1h.parquet
+2024-10-01 18:30:26 Data saved to data/EOD/EURGBP_d.parquet
+2024-10-01 18:30:26 Data saved to data/EOD/EURGBP_w.parquet
+2024-10-01 18:30:27 Data saved to data/EOD/EURGBP_m.parquet
+2024-10-01 18:30:29 Data saved to data/EOD/EURJPY_5m.parquet
+2024-10-01 18:30:29 Data saved to data/EOD/EURJPY_1h.parquet
+2024-10-01 18:30:30 Data saved to data/EOD/EURJPY_d.parquet
+2024-10-01 18:30:30 Data saved to data/EOD/EURJPY_w.parquet
+2024-10-01 18:30:31 Data saved to data/EOD/EURJPY_m.parquet
+2024-10-01 18:30:33 Data saved to data/EOD/EURAUD_5m.parquet
+2024-10-01 18:30:33 Data saved to data/EOD/EURAUD_1h.parquet
+2024-10-01 18:30:34 Data saved to data/EOD/EURAUD_d.parquet
+2024-10-01 18:30:34 Data saved to data/EOD/EURAUD_w.parquet
+2024-10-01 18:30:35 Data saved to data/EOD/EURAUD_m.parquet
+2024-10-01 18:30:36 Data saved to data/EOD/EURCHF_5m.parquet
+2024-10-01 18:30:37 Data saved to data/EOD/EURCHF_1h.parquet
+2024-10-01 18:30:37 Data saved to data/EOD/EURCHF_d.parquet
+2024-10-01 18:30:38 Data saved to data/EOD/EURCHF_w.parquet
+2024-10-01 18:30:38 Data saved to data/EOD/EURCHF_m.parquet
+2024-10-01 18:30:40 Data saved to data/EOD/EURCAD_5m.parquet
+2024-10-01 18:30:40 Data saved to data/EOD/EURCAD_1h.parquet
+2024-10-01 18:30:41 Data saved to data/EOD/EURCAD_d.parquet
+2024-10-01 18:30:41 Data saved to data/EOD/EURCAD_w.parquet
+2024-10-01 18:30:42 Data saved to data/EOD/EURCAD_m.parquet
+2024-10-01 18:30:44 Data saved to data/EOD/EURNZD_5m.parquet
+2024-10-01 18:30:44 Data saved to data/EOD/EURNZD_1h.parquet
+2024-10-01 18:30:45 Data saved to data/EOD/EURNZD_d.parquet
+2024-10-01 18:30:45 Data saved to data/EOD/EURNZD_w.parquet
+2024-10-01 18:30:46 Data saved to data/EOD/EURNZD_m.parquet
+2024-10-01 18:30:48 Data saved to data/EOD/GBPJPY_5m.parquet
+2024-10-01 18:30:48 Data saved to data/EOD/GBPJPY_1h.parquet
+2024-10-01 18:30:48 Data saved to data/EOD/GBPJPY_d.parquet
+2024-10-01 18:30:49 Data saved to data/EOD/GBPJPY_w.parquet
+2024-10-01 18:30:50 Data saved to data/EOD/GBPJPY_m.parquet
+2024-10-01 18:30:51 Data saved to data/EOD/GBPAUD_5m.parquet
+2024-10-01 18:30:51 Data saved to data/EOD/GBPAUD_1h.parquet
+2024-10-01 18:30:52 Data saved to data/EOD/GBPAUD_d.parquet
+2024-10-01 18:30:52 Data saved to data/EOD/GBPAUD_w.parquet
+2024-10-01 18:30:53 Data saved to data/EOD/GBPAUD_m.parquet
+2024-10-01 18:30:54 Data saved to data/EOD/GBPCHF_5m.parquet
+2024-10-01 18:30:55 Data saved to data/EOD/GBPCHF_1h.parquet
+2024-10-01 18:30:55 Data saved to data/EOD/GBPCHF_d.parquet
+2024-10-01 18:30:56 Data saved to data/EOD/GBPCHF_w.parquet
+2024-10-01 18:30:56 Data saved to data/EOD/GBPCHF_m.parquet
+2024-10-01 18:30:58 Data saved to data/EOD/GBPCAD_5m.parquet
+2024-10-01 18:30:59 Data saved to data/EOD/GBPCAD_1h.parquet
+2024-10-01 18:30:59 Data saved to data/EOD/GBPCAD_d.parquet
+2024-10-01 18:31:00 Data saved to data/EOD/GBPCAD_w.parquet
+2024-10-01 18:31:00 Data saved to data/EOD/GBPCAD_m.parquet
+2024-10-01 18:31:02 Data saved to data/EOD/GBPNZD_5m.parquet
+2024-10-01 18:31:03 Data saved to data/EOD/GBPNZD_1h.parquet
+2024-10-01 18:31:03 Data saved to data/EOD/GBPNZD_d.parquet
+2024-10-01 18:31:04 Data saved to data/EOD/GBPNZD_w.parquet
+2024-10-01 18:31:04 Data saved to data/EOD/GBPNZD_m.parquet
+2024-10-01 18:31:06 Data saved to data/EOD/AUDJPY_5m.parquet
+2024-10-01 18:31:07 Data saved to data/EOD/AUDJPY_1h.parquet
+2024-10-01 18:31:07 Data saved to data/EOD/AUDJPY_d.parquet
+2024-10-01 18:31:07 Data saved to data/EOD/AUDJPY_w.parquet
+2024-10-01 18:31:08 Data saved to data/EOD/AUDJPY_m.parquet
+2024-10-01 18:31:10 Data saved to data/EOD/AUDCHF_5m.parquet
+2024-10-01 18:31:10 Data saved to data/EOD/AUDCHF_1h.parquet
+2024-10-01 18:31:11 Data saved to data/EOD/AUDCHF_d.parquet
+2024-10-01 18:31:11 Data saved to data/EOD/AUDCHF_w.parquet
+2024-10-01 18:31:12 Data saved to data/EOD/AUDCHF_m.parquet
+2024-10-01 18:31:14 Data saved to data/EOD/AUDCAD_5m.parquet
+2024-10-01 18:31:14 Data saved to data/EOD/AUDCAD_1h.parquet
+2024-10-01 18:31:15 Data saved to data/EOD/AUDCAD_d.parquet
+2024-10-01 18:31:15 Data saved to data/EOD/AUDCAD_w.parquet
+2024-10-01 18:31:16 Data saved to data/EOD/AUDCAD_m.parquet
+2024-10-01 18:31:18 Data saved to data/EOD/AUDNZD_5m.parquet
+2024-10-01 18:31:18 Data saved to data/EOD/AUDNZD_1h.parquet
+2024-10-01 18:31:19 Data saved to data/EOD/AUDNZD_d.parquet
+2024-10-01 18:31:19 Data saved to data/EOD/AUDNZD_w.parquet
+2024-10-01 18:31:20 Data saved to data/EOD/AUDNZD_m.parquet
+2024-10-01 18:31:21 Data saved to data/EOD/CHFJPY_5m.parquet
+2024-10-01 18:31:22 Data saved to data/EOD/CHFJPY_1h.parquet
+2024-10-01 18:31:22 Data saved to data/EOD/CHFJPY_d.parquet
+2024-10-01 18:31:23 Data saved to data/EOD/CHFJPY_w.parquet
+2024-10-01 18:31:23 Data saved to data/EOD/CHFJPY_m.parquet
+2024-10-01 18:31:25 Data saved to data/EOD/CADJPY_5m.parquet
+2024-10-01 18:31:25 Data saved to data/EOD/CADJPY_1h.parquet
+2024-10-01 18:31:26 Data saved to data/EOD/CADJPY_d.parquet
+2024-10-01 18:31:27 Data saved to data/EOD/CADJPY_w.parquet
+2024-10-01 18:31:27 Data saved to data/EOD/CADJPY_m.parquet
+2024-10-01 18:31:29 Data saved to data/EOD/NZDJPY_5m.parquet
+2024-10-01 18:31:29 Data saved to data/EOD/NZDJPY_1h.parquet
+2024-10-01 18:31:30 Data saved to data/EOD/NZDJPY_d.parquet
+2024-10-01 18:31:30 Data saved to data/EOD/NZDJPY_w.parquet
+2024-10-01 18:31:31 Data saved to data/EOD/NZDJPY_m.parquet
+2024-10-01 18:31:32 Data saved to data/EOD/CADCHF_5m.parquet
+2024-10-01 18:31:33 Data saved to data/EOD/CADCHF_1h.parquet
+2024-10-01 18:31:33 Data saved to data/EOD/CADCHF_d.parquet
+2024-10-01 18:31:34 Data saved to data/EOD/CADCHF_w.parquet
+2024-10-01 18:31:34 Data saved to data/EOD/CADCHF_m.parquet
+2024-10-01 18:31:36 Data saved to data/EOD/NZDCHF_5m.parquet
+2024-10-01 18:31:36 Data saved to data/EOD/NZDCHF_1h.parquet
+2024-10-01 18:31:37 Data saved to data/EOD/NZDCHF_d.parquet
+2024-10-01 18:31:37 Data saved to data/EOD/NZDCHF_w.parquet
+2024-10-01 18:31:38 Data saved to data/EOD/NZDCHF_m.parquet
+2024-10-01 18:31:39 Data saved to data/EOD/NZDCAD_5m.parquet
+2024-10-01 18:31:40 Data saved to data/EOD/NZDCAD_1h.parquet
+2024-10-01 18:31:40 Data saved to data/EOD/NZDCAD_d.parquet
+2024-10-01 18:31:41 Data saved to data/EOD/NZDCAD_w.parquet
+2024-10-01 18:31:42 Data saved to data/EOD/NZDCAD_m.parquet
+2024-10-01 18:36:45 Data saved to data/EOD/EURUSD_5m.parquet
+2024-10-01 18:36:45 Data saved to data/EOD/EURUSD_1h.parquet
+2024-10-01 18:36:46 Data saved to data/EOD/EURUSD_d.parquet
+2024-10-01 18:36:46 Data saved to data/EOD/EURUSD_w.parquet
+2024-10-01 18:36:47 Data saved to data/EOD/EURUSD_m.parquet
+2024-10-01 18:36:49 Data saved to data/EOD/GBPUSD_5m.parquet
+2024-10-01 18:36:49 Data saved to data/EOD/GBPUSD_1h.parquet
+2024-10-01 18:36:49 Data saved to data/EOD/GBPUSD_d.parquet
+2024-10-01 18:36:50 Data saved to data/EOD/GBPUSD_w.parquet
+2024-10-01 18:36:51 Data saved to data/EOD/GBPUSD_m.parquet
+2024-10-01 18:36:53 Data saved to data/EOD/USDJPY_5m.parquet
+2024-10-01 18:36:53 Data saved to data/EOD/USDJPY_1h.parquet
+2024-10-01 18:36:54 Data saved to data/EOD/USDJPY_d.parquet
+2024-10-01 18:36:54 Data saved to data/EOD/USDJPY_w.parquet
+2024-10-01 18:36:55 Data saved to data/EOD/USDJPY_m.parquet
+2024-10-01 18:36:57 Data saved to data/EOD/AUDUSD_5m.parquet
+2024-10-01 18:36:57 Data saved to data/EOD/AUDUSD_1h.parquet
+2024-10-01 18:36:57 Data saved to data/EOD/AUDUSD_d.parquet
+2024-10-01 18:36:58 Data saved to data/EOD/AUDUSD_w.parquet
+2024-10-01 18:36:58 Data saved to data/EOD/AUDUSD_m.parquet
+2024-10-01 18:37:00 Data saved to data/EOD/USDCHF_5m.parquet
+2024-10-01 18:37:00 Data saved to data/EOD/USDCHF_1h.parquet
+2024-10-01 18:37:01 Data saved to data/EOD/USDCHF_d.parquet
+2024-10-01 18:37:01 Data saved to data/EOD/USDCHF_w.parquet
+2024-10-01 18:37:02 Data saved to data/EOD/USDCHF_m.parquet
+2024-10-01 18:37:04 Data saved to data/EOD/USDCAD_5m.parquet
+2024-10-01 18:37:04 Data saved to data/EOD/USDCAD_1h.parquet
+2024-10-01 18:37:05 Data saved to data/EOD/USDCAD_d.parquet
+2024-10-01 18:37:05 Data saved to data/EOD/USDCAD_w.parquet
+2024-10-01 18:37:06 Data saved to data/EOD/USDCAD_m.parquet
+2024-10-01 18:37:08 Data saved to data/EOD/NZDUSD_5m.parquet
+2024-10-01 18:37:08 Data saved to data/EOD/NZDUSD_1h.parquet
+2024-10-01 18:37:08 Data saved to data/EOD/NZDUSD_d.parquet
+2024-10-01 18:37:09 Data saved to data/EOD/NZDUSD_w.parquet
+2024-10-01 18:37:09 Data saved to data/EOD/NZDUSD_m.parquet
+2024-10-01 18:37:11 Data saved to data/EOD/EURGBP_5m.parquet
+2024-10-01 18:37:11 Data saved to data/EOD/EURGBP_1h.parquet
+2024-10-01 18:37:11 Data saved to data/EOD/EURGBP_d.parquet
+2024-10-01 18:37:12 Data saved to data/EOD/EURGBP_w.parquet
+2024-10-01 18:37:12 Data saved to data/EOD/EURGBP_m.parquet
+2024-10-01 18:37:14 Data saved to data/EOD/EURJPY_5m.parquet
+2024-10-01 18:37:15 Data saved to data/EOD/EURJPY_1h.parquet
+2024-10-01 18:37:15 Data saved to data/EOD/EURJPY_d.parquet
+2024-10-01 18:37:15 Data saved to data/EOD/EURJPY_w.parquet
+2024-10-01 18:37:16 Data saved to data/EOD/EURJPY_m.parquet
+2024-10-01 18:37:18 Data saved to data/EOD/EURAUD_5m.parquet
+2024-10-01 18:37:19 Data saved to data/EOD/EURAUD_1h.parquet
+2024-10-01 18:37:19 Data saved to data/EOD/EURAUD_d.parquet
+2024-10-01 18:37:20 Data saved to data/EOD/EURAUD_w.parquet
+2024-10-01 18:37:20 Data saved to data/EOD/EURAUD_m.parquet
+2024-10-01 18:37:22 Data saved to data/EOD/EURCHF_5m.parquet
+2024-10-01 18:37:22 Data saved to data/EOD/EURCHF_1h.parquet
+2024-10-01 18:37:23 Data saved to data/EOD/EURCHF_d.parquet
+2024-10-01 18:37:23 Data saved to data/EOD/EURCHF_w.parquet
+2024-10-01 18:37:24 Data saved to data/EOD/EURCHF_m.parquet
+2024-10-01 18:37:25 Data saved to data/EOD/EURCAD_5m.parquet
+2024-10-01 18:37:26 Data saved to data/EOD/EURCAD_1h.parquet
+2024-10-01 18:37:26 Data saved to data/EOD/EURCAD_d.parquet
+2024-10-01 18:37:27 Data saved to data/EOD/EURCAD_w.parquet
+2024-10-01 18:37:27 Data saved to data/EOD/EURCAD_m.parquet
+2024-10-01 18:37:29 Data saved to data/EOD/EURNZD_5m.parquet
+2024-10-01 18:37:29 Data saved to data/EOD/EURNZD_1h.parquet
+2024-10-01 18:37:29 Data saved to data/EOD/EURNZD_d.parquet
+2024-10-01 18:37:30 Data saved to data/EOD/EURNZD_w.parquet
+2024-10-01 18:37:30 Data saved to data/EOD/EURNZD_m.parquet
+2024-10-01 18:37:32 Data saved to data/EOD/GBPJPY_5m.parquet
+2024-10-01 18:37:32 Data saved to data/EOD/GBPJPY_1h.parquet
+2024-10-01 18:37:33 Data saved to data/EOD/GBPJPY_d.parquet
+2024-10-01 18:37:33 Data saved to data/EOD/GBPJPY_w.parquet
+2024-10-01 18:37:34 Data saved to data/EOD/GBPJPY_m.parquet
+2024-10-01 18:37:36 Data saved to data/EOD/GBPAUD_5m.parquet
+2024-10-01 18:37:36 Data saved to data/EOD/GBPAUD_1h.parquet
+2024-10-01 18:37:36 Data saved to data/EOD/GBPAUD_d.parquet
+2024-10-01 18:37:37 Data saved to data/EOD/GBPAUD_w.parquet
+2024-10-01 18:37:37 Data saved to data/EOD/GBPAUD_m.parquet
+2024-10-01 18:37:39 Data saved to data/EOD/GBPCHF_5m.parquet
+2024-10-01 18:37:39 Data saved to data/EOD/GBPCHF_1h.parquet
+2024-10-01 18:37:40 Data saved to data/EOD/GBPCHF_d.parquet
+2024-10-01 18:37:40 Data saved to data/EOD/GBPCHF_w.parquet
+2024-10-01 18:37:41 Data saved to data/EOD/GBPCHF_m.parquet
+2024-10-01 18:37:43 Data saved to data/EOD/GBPCAD_5m.parquet
+2024-10-01 18:37:43 Data saved to data/EOD/GBPCAD_1h.parquet
+2024-10-01 18:37:44 Data saved to data/EOD/GBPCAD_d.parquet
+2024-10-01 18:37:44 Data saved to data/EOD/GBPCAD_w.parquet
+2024-10-01 18:37:45 Data saved to data/EOD/GBPCAD_m.parquet
+2024-10-01 18:37:47 Data saved to data/EOD/GBPNZD_5m.parquet
+2024-10-01 18:37:47 Data saved to data/EOD/GBPNZD_1h.parquet
+2024-10-01 18:37:48 Data saved to data/EOD/GBPNZD_d.parquet
+2024-10-01 18:37:48 Data saved to data/EOD/GBPNZD_w.parquet
+2024-10-01 18:37:49 Data saved to data/EOD/GBPNZD_m.parquet
+2024-10-01 18:37:50 Data saved to data/EOD/AUDJPY_5m.parquet
+2024-10-01 18:37:51 Data saved to data/EOD/AUDJPY_1h.parquet
+2024-10-01 18:37:51 Data saved to data/EOD/AUDJPY_d.parquet
+2024-10-01 18:37:51 Data saved to data/EOD/AUDJPY_w.parquet
+2024-10-01 18:37:52 Data saved to data/EOD/AUDJPY_m.parquet
+2024-10-01 18:37:54 Data saved to data/EOD/AUDCHF_5m.parquet
+2024-10-01 18:37:54 Data saved to data/EOD/AUDCHF_1h.parquet
+2024-10-01 18:37:55 Data saved to data/EOD/AUDCHF_d.parquet
+2024-10-01 18:37:55 Data saved to data/EOD/AUDCHF_w.parquet
+2024-10-01 18:37:55 Data saved to data/EOD/AUDCHF_m.parquet
+2024-10-01 18:37:57 Data saved to data/EOD/AUDCAD_5m.parquet
+2024-10-01 18:37:57 Data saved to data/EOD/AUDCAD_1h.parquet
+2024-10-01 18:37:58 Data saved to data/EOD/AUDCAD_d.parquet
+2024-10-01 18:37:58 Data saved to data/EOD/AUDCAD_w.parquet
+2024-10-01 18:37:59 Data saved to data/EOD/AUDCAD_m.parquet
+2024-10-01 18:38:01 Data saved to data/EOD/AUDNZD_5m.parquet
+2024-10-01 18:38:01 Data saved to data/EOD/AUDNZD_1h.parquet
+2024-10-01 18:38:01 Data saved to data/EOD/AUDNZD_d.parquet
+2024-10-01 18:38:02 Data saved to data/EOD/AUDNZD_w.parquet
+2024-10-01 18:38:02 Data saved to data/EOD/AUDNZD_m.parquet
+2024-10-01 18:38:04 Data saved to data/EOD/CHFJPY_5m.parquet
+2024-10-01 18:38:05 Data saved to data/EOD/CHFJPY_1h.parquet
+2024-10-01 18:38:05 Data saved to data/EOD/CHFJPY_d.parquet
+2024-10-01 18:38:06 Data saved to data/EOD/CHFJPY_w.parquet
+2024-10-01 18:38:06 Data saved to data/EOD/CHFJPY_m.parquet
+2024-10-01 18:38:08 Data saved to data/EOD/CADJPY_5m.parquet
+2024-10-01 18:38:08 Data saved to data/EOD/CADJPY_1h.parquet
+2024-10-01 18:38:09 Data saved to data/EOD/CADJPY_d.parquet
+2024-10-01 18:38:10 Data saved to data/EOD/CADJPY_w.parquet
+2024-10-01 18:38:10 Data saved to data/EOD/CADJPY_m.parquet
+2024-10-01 18:38:12 Data saved to data/EOD/NZDJPY_5m.parquet
+2024-10-01 18:38:12 Data saved to data/EOD/NZDJPY_1h.parquet
+2024-10-01 18:38:13 Data saved to data/EOD/NZDJPY_d.parquet
+2024-10-01 18:38:13 Data saved to data/EOD/NZDJPY_w.parquet
+2024-10-01 18:38:14 Data saved to data/EOD/NZDJPY_m.parquet
+2024-10-01 18:38:15 Data saved to data/EOD/CADCHF_5m.parquet
+2024-10-01 18:38:16 Data saved to data/EOD/CADCHF_1h.parquet
+2024-10-01 18:38:16 Data saved to data/EOD/CADCHF_d.parquet
+2024-10-01 18:38:17 Data saved to data/EOD/CADCHF_w.parquet
+2024-10-01 18:38:17 Data saved to data/EOD/CADCHF_m.parquet
+2024-10-01 18:38:19 Data saved to data/EOD/NZDCHF_5m.parquet
+2024-10-01 18:38:19 Data saved to data/EOD/NZDCHF_1h.parquet
+2024-10-01 18:38:19 Data saved to data/EOD/NZDCHF_d.parquet
+2024-10-01 18:38:20 Data saved to data/EOD/NZDCHF_w.parquet
+2024-10-01 18:38:20 Data saved to data/EOD/NZDCHF_m.parquet
+2024-10-01 18:38:22 Data saved to data/EOD/NZDCAD_5m.parquet
+2024-10-01 18:38:22 Data saved to data/EOD/NZDCAD_1h.parquet
+2024-10-01 18:38:23 Data saved to data/EOD/NZDCAD_d.parquet
+2024-10-01 18:38:23 Data saved to data/EOD/NZDCAD_w.parquet
+2024-10-01 18:38:24 Data saved to data/EOD/NZDCAD_m.parquet
