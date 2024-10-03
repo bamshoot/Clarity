@@ -1,0 +1,11 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "driver": "DuckDB",
+            "name": "Clarity",
+            "database": "${workspaceFolder:Clarity}/server/database/clarity.db"
+        }
+    ],
+    "sqltools.useNodeRuntime": true
+}
