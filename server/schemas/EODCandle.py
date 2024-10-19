@@ -6,8 +6,8 @@ from datetime import datetime, date
 class EODCandle(BaseModel):
     timestamp: Optional[int] = None
     gmtoffset: Optional[int] = None
-    dt: Optional[datetime] = Field(None, alias="datetime")
-    d: Optional[date] = Field(None, alias="date")
+    datetime_: Optional[datetime] = Field(None, alias="datetime")
+    date_: Optional[date] = Field(None, alias="date")
     open: Optional[float] = None
     high: Optional[float] = None
     low: Optional[float] = None
@@ -24,5 +24,14 @@ class EODCandle(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        if self.dt is None and self.d is not None:
-            self.dt = datetime.combine(self.d, datetime.min.time())
+        if self.datetime_ is None and self.date_ is not None:
+            self.datetime_ = datetime.combine(self.date_, datetime.min.time())
+        elif self.datetime_ is None and self.timestamp is not None:
+            self.datetime_ = datetime.fromtimestamp(self.timestamp)
+
+        if self.date_ is None and self.datetime_ is not None:
+            self.date_ = self.datetime_.date()
+
+        # Calculate timestamp from datetime_ if it's not provided
+        if self.timestamp is None and self.datetime_ is not None:
+            self.timestamp = int(self.datetime_.timestamp())
