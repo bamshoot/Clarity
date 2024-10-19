@@ -9,7 +9,7 @@ import pandas as pd
 async def test_eod_data():
     config = Config()
     async with EODData(config.EOD_URL, config.EOD_API_KEY) as eod:
-        candles = await eod.get_candles("EURUSD", "FOREX", "5m", "json")
+        candles = await eod.get_candles("EURUSD", "FOREX", "d", "json")
         return candles
 
 
@@ -30,7 +30,7 @@ async def test_insert_candles_duckdb():
     with duckdb.connect("./database/clarity.db") as con:
         con.execute(
             """
-            CREATE TABLE IF NOT EXISTS EURUSD_5m
+            CREATE TABLE IF NOT EXISTS EURUSD_d
              AS SELECT * FROM df
              ORDER BY timestamp ASC
         """
@@ -38,30 +38,32 @@ async def test_insert_candles_duckdb():
         con.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_timestamp
-             ON EURUSD_5m (timestamp)
+             ON EURUSD_d (timestamp)
         """
         )
 
         result = con.execute(
-            "SELECT * FROM df WHERE timestamp NOT IN (SELECT timestamp FROM EURUSD_5m)"
+            "SELECT * FROM df WHERE timestamp NOT IN (SELECT timestamp FROM EURUSD_d)"
         )
         print(f"Rows to add: {len(result.fetchall())}")
 
         con.execute(
             """
-            INSERT INTO EURUSD_5m
+            INSERT INTO EURUSD_d
             SELECT * FROM df
-            WHERE timestamp NOT IN (SELECT timestamp FROM EURUSD_5m)
+            WHERE timestamp NOT IN (SELECT timestamp FROM EURUSD_d)
         """
         )
 
 
-# function to get the final timestamp in the table
-def get_final_timestamp(db_path, table_name):
-    with duckdb.connect(db_path) as con:
-        result = con.sql(f"SELECT MAX(timestamp) FROM {table_name}")
-        return result.fetchone()[0]
+# asyncio.run(test_insert_candles_duckdb())
 
 
-asyncio.run(test_insert_candles_duckdb())
-print(get_final_timestamp("./database/clarity.db", "EURUSD_5m"))
+async def test_get_candle_plus_one_period():
+    config = Config()
+    async with EODData(config.EOD_URL, config.EOD_API_KEY) as eod:
+        candle = await eod.get_candle_plus_one_period("EURUSD", "FOREX", "5m")
+        print(f"Candle plus one period: {candle}")
+
+
+asyncio.run(test_get_candle_plus_one_period())
