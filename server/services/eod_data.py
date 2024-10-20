@@ -17,10 +17,18 @@ class EODData:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.client.aclose()
 
-    async def get_candles(self, ticker: str, exchange: str, interval: str, fmt: str):
+    async def get_candles(
+        self,
+        ticker: str,
+        exchange: str,
+        interval: str,
+        from_date_time=None,
+        fmt: str = "json",
+    ):
         endpoint = "eod" if interval in ["d", "w", "m"] else "intraday"
         params = {
             "period" if endpoint == "eod" else "interval": interval,
+            "from": from_date_time,
             "fmt": fmt,
             "api_token": self.api_key,
         }
@@ -31,16 +39,20 @@ class EODData:
 
         return response.json()
 
-    async def get_latest_candle_in_db(self, ticker: str, exchange: str, interval: str):
-        table_name = f"{ticker}_{interval}"
+    async def get_latest_candle_in_db(
+        self, prefix: str, ticker: str, exchange: str, interval: str
+    ):
+        table_name = f"{prefix}_{ticker}_{interval}"
         field = "date" if interval in ["d", "w", "m"] else "timestamp"
         query = f"SELECT MAX({field}) FROM {table_name}"
         return self.con.sql(query).fetchone()[0]
 
     async def get_candle_plus_one_period(
-        self, ticker: str, exchange: str, interval: str
+        self, prefix: str, ticker: str, exchange: str, interval: str
     ):
-        latest_candle = await self.get_latest_candle_in_db(ticker, exchange, interval)
+        latest_candle = await self.get_latest_candle_in_db(
+            prefix, ticker, exchange, interval
+        )
 
         if interval in ["5m", "1h"]:
             interval_seconds = {"5m": 300, "1h": 3600}

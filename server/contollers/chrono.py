@@ -1,12 +1,6 @@
 import asyncio
 import pandas as pd
 from datetime import datetime
-
-# import os
-# import json
-# import httpx
-# import pyarrow as pa
-# import pyarrow.parquet as pq
 from utils.logger import Logger
 from config.config import Config
 from database.db import DB
@@ -122,8 +116,10 @@ class EODDataCollectionChrono(Chrono):
         ]
         self.semaphore = asyncio.Semaphore(max_concurrent_requests)
 
-    async def _get_candles(self, instrument: str, period: str):
-        return await self.data_service.get_candles(instrument, "FOREX", period, "json")
+    async def _get_candles(self, instrument: str, period: str, from_date_time=None):
+        return await self.data_service.get_candles(
+            instrument, "FOREX", period, from_date_time, fmt="json"
+        )
 
     async def _eod_candle_schema(self, data, instrument: str, period: str):
         if isinstance(data, list) and data:
@@ -136,7 +132,7 @@ class EODDataCollectionChrono(Chrono):
 
     async def _get_candle_plus_one_period(self, instrument: str, period: str):
         return await self.data_service.get_candle_plus_one_period(
-            instrument, "FOREX", period
+            self.prefix, instrument, "FOREX", period
         )
 
     async def _full_candle_insert(self, data, instrument: str, period: str):
@@ -163,29 +159,34 @@ class EODDataCollectionChrono(Chrono):
 
     async def _partial_candle_insert(self, data, instrument: str, period: str):
         candles = await self._eod_candle_schema(data, instrument, period)
-        df = pd.DataFrame([candle.__dict__ for candle in candles])
-        df = df.rename(columns={"datetime_": "datetime", "date_": "date"})
+        if len(candles) > 0:
+            df = pd.DataFrame([candle.__dict__ for candle in candles])
+            df = df.rename(columns={"datetime_": "datetime", "date_": "date"})
 
-        with self.db.get_connection() as con:
-            con.register("df_temp", df)
+            with self.db.get_connection() as con:
+                con.register("df_temp", df)
 
-            rows_added = con.execute(
-                f"""
-                INSERT INTO {self.prefix}_{instrument}_{period}
-                SELECT * FROM df_temp
-                WHERE timestamp NOT IN (
-                    SELECT timestamp
-                    FROM {self.prefix}_{instrument}_{period}
+                rows_added = con.execute(
+                    f"""
+                    INSERT INTO {self.prefix}_{instrument}_{period}
+                    SELECT * FROM df_temp
+                    WHERE timestamp NOT IN (
+                        SELECT timestamp
+                        FROM {self.prefix}_{instrument}_{period}
+                    )
+                    """
                 )
-                """
-            )
 
+                self.logger.logger.info(
+                    f"Rows added to {self.prefix}_{instrument}_{period}: "
+                    f"{rows_added.rowcount}"
+                )
+
+                con.unregister("df_temp")
+        else:
             self.logger.logger.info(
-                f"Rows added to {self.prefix}_{instrument}_{period}: "
-                f"{rows_added.rowcount}"
+                f"No new candles from api for {self.prefix}_{instrument}_{period}"
             )
-
-            con.unregister("df_temp")
 
     async def _execute_task(self):
         self.logger.logger.info("Starting data collection task.")
@@ -194,13 +195,14 @@ class EODDataCollectionChrono(Chrono):
         unix_time_now = int(time_now.timestamp())
 
         time_comparison = {
-            "d": time_now,
-            "w": time_now,
-            "m": time_now,
+            "d": time_now.date(),
+            "w": time_now.date(),
+            "m": time_now.date(),
             "1h": unix_time_now,
             "5m": unix_time_now,
         }
 
+        print(time_comparison)
         for instrument, period in self.cross_rates_periods:
             table_name = f"{self.prefix}_{instrument}_{period}"
             try:
@@ -222,11 +224,14 @@ class EODDataCollectionChrono(Chrono):
                         self.logger.logger.info(
                             f"Updating existing table: {table_name}"
                         )
-                        data = await self._get_candles(instrument, period)
+                        data = await self._get_candles(
+                            instrument, period, candle_plus_one_period
+                        )
                         await self._partial_candle_insert(data, instrument, period)
                     else:
                         self.logger.logger.info(
-                            f"No update needed for table: {table_name}"
+                            f"No update needed for table: {table_name} with "
+                            f"{candle_plus_one_period} and {time_comparison[period]}"
                         )
 
             except Exception as e:
