@@ -1,17 +1,22 @@
 import asyncio
-import os
-import json
-import httpx
-import pyarrow as pa
-import pyarrow.parquet as pq
+import pandas as pd
+from datetime import datetime
+
+# import os
+# import json
+# import httpx
+# import pyarrow as pa
+# import pyarrow.parquet as pq
 from utils.logger import Logger
 from config.config import Config
+from database.db import DB
+from schemas.EODCandle import EODCandle
 
 config = Config()
 
 
 class Chrono:
-    def __init__(self, name: str, interval: int = 10):
+    def __init__(self, name: str, interval: int = 10, db: DB = None):
         """
         Asynchronous Chrono class for periodic tasks.
 
@@ -20,6 +25,7 @@ class Chrono:
         """
         self.name = name
         self.interval = interval
+        self.db = db
         self.logger = Logger(self.name, mode="a")
         self._stop_event = asyncio.Event()
         self._task = None
@@ -93,9 +99,9 @@ class Chrono:
         return self._task is not None and not self._task.done()
 
 
-class DataCollectionChrono(Chrono):
+class EODDataCollectionChrono(Chrono):
     def __init__(
-        self, data_service, interval: int = 300, max_concurrent_requests: int = 10
+        self, data_service, interval: int, max_concurrent_requests: int, db: DB
     ):
         """
         Asynchronous DataCollectionChrono for collecting EOD data.
@@ -104,10 +110,11 @@ class DataCollectionChrono(Chrono):
         :param interval: Time interval between data collection cycles in seconds.
         :param max_concurrent_requests: Maximum number of concurrent HTTP requests.
         """
-        super().__init__(name="data_collection_chrono", interval=interval)
+        super().__init__(name="data_collection_chrono", interval=interval, db=db)
         self.data_service = data_service
         self.instruments = config.EOD_INSTRUMENTS["cross_rates"]
         self.periods = config.EOD_INSTRUMENTS["periods"]
+        self.prefix = "tbl_EOD"
         self.cross_rates_periods = [
             (instrument, period)
             for instrument in self.instruments
@@ -115,73 +122,112 @@ class DataCollectionChrono(Chrono):
         ]
         self.semaphore = asyncio.Semaphore(max_concurrent_requests)
 
+    async def _get_candles(self, instrument: str, period: str):
+        return await self.data_service.get_candles(instrument, "FOREX", period, "json")
+
+    async def _eod_candle_schema(self, data, instrument: str, period: str):
+        if isinstance(data, list) and data:
+            candles = [EODCandle(**candle_data) for candle_data in data]
+            self.logger.logger.info(
+                f"Total candles processed: {len(candles)} for {instrument} {period}"
+            )
+            return candles
+        return []
+
+    async def _get_candle_plus_one_period(self, instrument: str, period: str):
+        return await self.data_service.get_candle_plus_one_period(
+            instrument, "FOREX", period
+        )
+
+    async def _full_candle_insert(self, data, instrument: str, period: str):
+        candles = await self._eod_candle_schema(data, instrument, period)
+        df = pd.DataFrame([candle.__dict__ for candle in candles])
+        df = df.rename(columns={"datetime_": "datetime", "date_": "date"})
+
+        with self.db.get_connection() as con:
+            con.register("df_temp", df)
+
+            con.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {self.prefix}_{instrument}_{period}
+                AS SELECT * FROM df_temp
+                """
+            )
+
+            con.execute(
+                f"""CREATE INDEX IF NOT EXISTS idx_timestamp
+                     ON {self.prefix}_{instrument}_{period} (timestamp)"""
+            )
+
+            con.unregister("df_temp")
+
+    async def _partial_candle_insert(self, data, instrument: str, period: str):
+        candles = await self._eod_candle_schema(data, instrument, period)
+        df = pd.DataFrame([candle.__dict__ for candle in candles])
+        df = df.rename(columns={"datetime_": "datetime", "date_": "date"})
+
+        with self.db.get_connection() as con:
+            con.register("df_temp", df)
+
+            rows_added = con.execute(
+                f"""
+                INSERT INTO {self.prefix}_{instrument}_{period}
+                SELECT * FROM df_temp
+                WHERE timestamp NOT IN (
+                    SELECT timestamp
+                    FROM {self.prefix}_{instrument}_{period}
+                )
+                """
+            )
+
+            self.logger.logger.info(
+                f"Rows added to {self.prefix}_{instrument}_{period}: "
+                f"{rows_added.rowcount}"
+            )
+
+            con.unregister("df_temp")
+
     async def _execute_task(self):
-        """Overrides the base method to perform data collection."""
         self.logger.logger.info("Starting data collection task.")
-        os.makedirs("data/EOD", exist_ok=True)
-        tasks = [
-            self._fetch_and_save(instrument, period)
-            for instrument, period in self.cross_rates_periods
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for result in results:
-            if isinstance(result, Exception):
-                self.logger.logger.error(f"Error in data collection task: {result}")
-        self.logger.logger.info("Data collection task completed.")
 
-    async def _fetch_and_save(self, instrument: str, period: str):
-        """
-        Fetches candle data and saves it to a Parquet file.
+        time_now = datetime.now()
+        unix_time_now = int(time_now.timestamp())
 
-        :param instrument: The financial instrument to fetch data for.
-        :param period: The time period for the candle data.
-        """
-        async with self.semaphore:
+        time_comparison = {
+            "d": time_now,
+            "w": time_now,
+            "m": time_now,
+            "1h": unix_time_now,
+            "5m": unix_time_now,
+        }
+
+        for instrument, period in self.cross_rates_periods:
+            table_name = f"{self.prefix}_{instrument}_{period}"
             try:
-                raw_data = await self.data_service.get_candles(
-                    instrument,
-                    "FOREX",
-                    period,
-                    "json",
-                )
-                if not raw_data:
-                    self.logger.logger.warning(
-                        f"No data fetched for {instrument} on the {period} period."
-                    )
+                table_exists = self.db.table_exists(table_name)
+
+                if not table_exists:
+                    self.logger.logger.info(f"Creating new table: {table_name}")
+                    data = await self._get_candles(instrument, period)
+                    await self._full_candle_insert(data, instrument, period)
                 else:
-                    file_path = f"data/EOD/{instrument}_{period}.parquet"
-                    self._save_json_to_parquet(raw_data, file_path)
-            except httpx.HTTPStatusError as he:
-                self.logger.logger.error(f"HTTP Error for {instrument} {period}: {he}")
+                    candle_plus_one_period = await self._get_candle_plus_one_period(
+                        instrument, period
+                    )
+
+                    if (
+                        period in time_comparison
+                        and candle_plus_one_period < time_comparison[period]
+                    ):
+                        self.logger.logger.info(
+                            f"Updating existing table: {table_name}"
+                        )
+                        data = await self._get_candles(instrument, period)
+                        await self._partial_candle_insert(data, instrument, period)
+                    else:
+                        self.logger.logger.info(
+                            f"No update needed for table: {table_name}"
+                        )
+
             except Exception as e:
-                self.logger.logger.error(
-                    "Unexpected error in data collection for %s %s: %s",
-                    instrument,
-                    period,
-                    e,
-                )
-
-    def _save_json_to_parquet(self, raw_data, file_path: str):
-        """
-        Saves JSON data to a Parquet file.
-
-        :param raw_data: JSON data to save.
-        :param file_path: Path to the Parquet file.
-        """
-        try:
-            if isinstance(raw_data, dict):
-                raw_data = [raw_data]
-            elif isinstance(raw_data, str):
-                raw_data = json.loads(raw_data)
-                if isinstance(raw_data, dict):
-                    raw_data = [raw_data]
-
-            table = pa.Table.from_pylist(raw_data)
-            pq.write_table(table, file_path)
-            self.logger.logger.info(f"Data saved to {file_path}")
-        except json.JSONDecodeError as je:
-            self.logger.logger.error(f"JSON Decode Error: {je}")
-        except pa.lib.ArrowInvalid as ae:
-            self.logger.logger.error(f"Arrow Invalid Error: {ae}")
-        except Exception as e:
-            self.logger.logger.error(f"Failed to save data: {e}")
+                self.logger.logger.error(f"Error processing {table_name}: {str(e)}")

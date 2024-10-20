@@ -14,4 +14,4 @@ def drop_tables(db_path):
 
 
 # print(list_tables("./database/clarity.db"))
-# drop_tables("./database/clarity.db")
+drop_tables("./database/clarity.db")

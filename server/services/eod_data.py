@@ -43,11 +43,9 @@ class EODData:
         latest_candle = await self.get_latest_candle_in_db(ticker, exchange, interval)
 
         if interval in ["5m", "1h"]:
-            # For intraday data, latest_candle is a Unix timestamp
             interval_seconds = {"5m": 300, "1h": 3600}
             return latest_candle + interval_seconds[interval]
         else:
-            # For daily, weekly, monthly data, latest_candle is a datetime
             interval_deltas = {
                 "d": relativedelta(days=1),
                 "w": relativedelta(weeks=1),

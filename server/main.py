@@ -4,11 +4,10 @@ from routers import main_router, eod_router
 import uvicorn
 from config.config import Config
 
-# from contollers.chrono import DataCollectionChrono
+from contollers.chrono import EODDataCollectionChrono
 from contextlib import asynccontextmanager
 from services.eod_data import EODData
 from database.db import DB
-from resource import williams_fractal
 
 config = Config()
 
@@ -19,30 +18,19 @@ eod_data_service = EODData(config.EOD_URL, config.EOD_API_KEY)
 async def lifespan(app: FastAPI):
     app.state.db = DB()
 
-    # app.state.data_collection_chrono = DataCollectionChrono(
-    #     data_service=eod_data_service,
-    #     interval=300,
-    #     max_concurrent_requests=10,
-    # )
-
-    # await app.state.data_collection_chrono.start()
-    app.state.config = config
-
-    result = williams_fractal(
-        db=app.state.db,
-        table="USDJPY_d",
-        period=3,
-        data_point="close",
-        column_name="date",
+    app.state.data_collection_chrono = EODDataCollectionChrono(
+        eod_data_service, 300, 3, app.state.db
     )
-    print(result)
+
+    await app.state.data_collection_chrono.start()
+    app.state.config = config
 
     try:
         yield
 
     finally:
         app.state.db.close()
-        # await app.state.data_collection_chrono.stop(timeout=10)
+        await app.state.data_collection_chrono.stop(timeout=10)
 
 
 app = FastAPI(lifespan=lifespan)
