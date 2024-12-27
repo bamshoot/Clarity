@@ -4,7 +4,7 @@ from routers import main_router, eod_router
 import uvicorn
 from config.config import Config
 
-from contollers.chrono import EODDataCollectionChrono
+from controllers.chrono import EODDataCollectionChrono
 from contextlib import asynccontextmanager
 from services.eod_data import EODData
 from database.db import DB
