@@ -13,5 +13,10 @@ def drop_tables(db_path):
             con.sql(f"DROP TABLE IF EXISTS {table[0]}")
 
 
-# print(list_tables("./database/clarity.db"))
-drop_tables("./database/clarity.db")
+def get_table(db_path, table_name):
+    with duckdb.connect(db_path) as con:
+        return con.sql(f"SELECT * FROM {table_name}")
+
+
+# print(list_tables("../database/clarity.db"))
+# drop_tables("./database/clarity.db")
