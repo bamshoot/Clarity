@@ -1,52 +1,58 @@
 import pandas as pd
 
 
-def williams_fractal(df, period=2, candle_price_point='close'):
+def williams_fractal(ohlc, candle_price_point, period: int = 2):
     """
-    Calculate Williams Fractal for a given DataFrame.
-
-    Parameters:
-    df (pd.DataFrame): DataFrame with columns 'High' and 'Low' or 'Close'.
-    period (int): Number of periods before and after the high/low to consider.
-    candle_price_point (str): Type of data to use ('high_low' or 'close').
-
-    Returns:
-    pd.DataFrame: DataFrame with the original data and columns for upper and
-    lower fractals.
+    Williams Fractal Indicator
+    Source: https://www.investopedia.com/terms/f/fractal.asp
+    :param DataFrame ohlc: data
+    :param int period: how many lower highs/higher lows the extremum value should be
+        preceded and followed.
+    :return DataFrame: fractals identified by boolean
     """
-    df = df.copy()
 
-    # Initialize the columns for upper and lower fractals with NaN
-    df['uf'] = pd.Series([float('nan')] * len(df))
-    df['lf'] = pd.Series([float('nan')] * len(df))
+    def is_bullish_fractal(x):
+        if x[period] == max(x):
+            return True
+        return False
 
-    # Loop through the data to identify fractals
-    if candle_price_point == 'high_low':
-        for i in range(period, len(df) - period):
-            high_range = df['high'].iloc[i-period:i+period+1]
-            low_range = df['low'].iloc[i-period:i+period+1]
+    def is_bearish_fractal(x):
+        if x[period] == min(x):
+            return True
+        return False
 
-            # Check for upper fractal
-            if df['high'].iloc[i] == high_range.max():
-                df.iloc[i, df.columns.get_loc(
-                    'uf')] = df['high'].iloc[i]
+    if candle_price_point == "high_low":
 
-            # Check for lower fractal
-            if df['low'].iloc[i] == low_range.min():
-                df.iloc[i, df.columns.get_loc(
-                    'lf')] = df['low'].iloc[i]
-    elif candle_price_point == 'close':
-        for i in range(period, len(df) - period):
-            close_range = df['close'].iloc[i-period:i+period+1]
+        window_size = period * 2 + 1
+        bearish_fractals = pd.Series(
+            ohlc.low.rolling(window=window_size, center=True).apply(
+                is_bearish_fractal, raw=True
+            ),
+            name="lf",
+        )
 
-            # Check for upper fractal
-            if df['close'].iloc[i] == close_range.max():
-                df.iloc[i, df.columns.get_loc(
-                    'uf')] = df['close'].iloc[i]
+        bullish_fractals = pd.Series(
+            ohlc.high.rolling(window=window_size, center=True).apply(
+                is_bullish_fractal, raw=True
+            ),
+            name="uf",
+        )
 
-            # Check for lower fractal
-            if df['close'].iloc[i] == close_range.min():
-                df.iloc[i, df.columns.get_loc(
-                    'lf')] = df['close'].iloc[i]
+    elif candle_price_point == "close":
 
-    return df
+        window_size = period * 2 + 1
+        bearish_fractals = pd.Series(
+            ohlc.close.rolling(window=window_size, center=True).apply(
+                is_bearish_fractal, raw=True
+            ),
+            name="lf",
+        )
+
+        bullish_fractals = pd.Series(
+            ohlc.close.rolling(window=window_size, center=True).apply(
+                is_bullish_fractal, raw=True
+            ),
+            name="uf",
+        )
+
+    return pd.concat([bearish_fractals, bullish_fractals], axis=1)

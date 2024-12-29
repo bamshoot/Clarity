@@ -13,24 +13,38 @@ class DataFoundationBuilder:
         if hasattr(self, 'con'):
             self.con.close()
 
-    def get_candles_from_db(self, table_name: str):
+    def get_table_from_db(self, table_name: str):
         return self.con.sql(f"SELECT * FROM {table_name}").df()
 
     def create_close_data(self, df: pd.DataFrame):
         last_close = df.iloc[-1].close
-        print(last_close)
         return self.con.execute("""
             SELECT *, ABS(close - ?) as disLstClose
             FROM df
         """, [last_close]).df()
 
     def create_fractal_data(
-            self, df: pd.DataFrame, candle_price_point: str, period: int = 2):
+            self,
+            df: pd.DataFrame,
+            candle_price_point: str,
+            instrument_name: str,
+            period: int = 2):
+
+        table_name = f"tbl_{instrument_name}_fractals"
+
         fractal = williams_fractal(df, candle_price_point, period)
+        print(fractal)
         fractal = df.join(fractal).sort_index()
         fractal = fractal[(fractal['uf'] == 1) | (fractal['lf'] == 1)]
         fractal['f'] = period
-        return fractal
+
+        self.con.execute(f"DROP TABLE IF EXISTS {table_name}")
+        self.con.execute(f"""
+            CREATE TABLE {table_name} AS
+            SELECT * FROM fractal
+        """)
+
+        return self.con.sql(f"SELECT * FROM {table_name}").df()
 
     def create_cluster_data(
             self, df: pd.DataFrame, candle_price_point: str, k: int = 5):
@@ -94,6 +108,8 @@ class DataFoundationBuilder:
 
 
 data_foundation_builder = DataFoundationBuilder("database/clarity.db")
-data = data_foundation_builder.get_candles_from_db("tbl_EOD_AUDCAD_d")
+data = data_foundation_builder.get_table_from_db("tbl_EOD_AUDCAD_d")
 close_data = data_foundation_builder.create_close_data(data)
-print(close_data)
+fractal_data = data_foundation_builder.create_fractal_data(
+    close_data, "close", "EOD_AUDCAD_d")
+print(fractal_data)
