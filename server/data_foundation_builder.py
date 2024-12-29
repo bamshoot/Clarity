@@ -33,7 +33,6 @@ class DataFoundationBuilder:
         table_name = f"tbl_{instrument_name}_fractals"
 
         fractal = williams_fractal(df, candle_price_point, period)
-        print(fractal)
         fractal = df.join(fractal).sort_index()
         fractal = fractal[(fractal['uf'] == 1) | (fractal['lf'] == 1)]
         fractal['f'] = period
@@ -46,29 +45,41 @@ class DataFoundationBuilder:
 
         return self.con.sql(f"SELECT * FROM {table_name}").df()
 
-    def create_cluster_data(
-            self, df: pd.DataFrame, candle_price_point: str, k: int = 5):
+    def create_cluster_data(self,
+                            candle_price_point: str,
+                            instrument_name: str,
+                            k: int = 5):
+
+        table_name = f"tbl_{instrument_name}_fractals"
+        df = self.get_table_from_db(table_name)
+
         clusters, centroids = kmeans1d.cluster(df[candle_price_point], k)
         cent_clust = [centroids[clust] for clust in clusters]
 
-        duckdb.register("temp_df", df)
-        duckdb.register("temp_clusters", pd.DataFrame({
-            'row_num': range(len(clusters)),
-            'clust': clusters,
-            'cent': cent_clust
-        }))
+        df['cent'] = cent_clust
+        df['clust'] = clusters
 
-        return duckdb.sql("""
-            SELECT t.*, c.clust, c.cent, ? as k
-            FROM temp_df t
-            JOIN temp_clusters c ON c.row_num = ROW_NUMBER() OVER () - 1
-        """, [k]).df()
+        self.con.execute(f"DROP TABLE IF EXISTS {table_name}")
+        self.con.execute(f"""
+            CREATE TABLE {table_name} AS
+            SELECT * FROM df
+        """)
 
-    def create_centroid_dist_close(self, df: pd.DataFrame):
-        return duckdb.sql("""
-            SELECT *, ABS(cent - close) as centDistClose
-            FROM df
-        """).df()
+        return self.con.sql(f"SELECT * FROM {table_name}").df()
+
+    def create_centroid_dist_close(self, instrument_name: str):
+        table_name = f"tbl_{instrument_name}_fractals"
+        df = self.get_table_from_db(table_name)
+
+        df['centDistClose'] = df['cent'] - df['close']
+
+        self.con.execute(f"DROP TABLE IF EXISTS {table_name}")
+        self.con.execute(f"""
+            CREATE TABLE {table_name} AS
+            SELECT * FROM df
+        """)
+
+        return self.con.sql(f"SELECT * FROM {table_name}").df()
 
     def create_cluster_agg_data(self, df: pd.DataFrame):
         return duckdb.sql("""
@@ -112,4 +123,9 @@ data = data_foundation_builder.get_table_from_db("tbl_EOD_AUDCAD_d")
 close_data = data_foundation_builder.create_close_data(data)
 fractal_data = data_foundation_builder.create_fractal_data(
     close_data, "close", "EOD_AUDCAD_d")
-print(fractal_data)
+
+centroid_dist_close_data = data_foundation_builder.create_cluster_data(
+    "close", "EOD_AUDCAD_d", k=5)
+centroid_dist_close_data = data_foundation_builder.create_centroid_dist_close(
+    "EOD_AUDCAD_d")
+print(centroid_dist_close_data)
