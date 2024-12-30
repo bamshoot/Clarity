@@ -1,5 +1,4 @@
 # import pandas as pd
-from indicators.williams_fractal import williams_fractal
 # import kmeans1d
 import duckdb
 # import numpy as np
@@ -48,6 +47,14 @@ class DataFoundationBuilder:
             ALTER TABLE {fractal_table_name}
             ADD COLUMN idxExp DOUBLE
         """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN uf BOOLEAN
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN lf BOOLEAN
+        """)
 
     def _reset_table(self, table_name: str, fractal_table_name: str):
         self._drop_fractal_table(fractal_table_name)
@@ -78,6 +85,7 @@ class DataFoundationBuilder:
             """)
 
         self._drop_fractal_table(f"{table_name}_temp")
+
         self.con.sql(f"""
             CREATE TABLE {table_name}_temp AS
             SELECT *,
@@ -97,33 +105,73 @@ class DataFoundationBuilder:
 
         self._drop_fractal_table(f"{table_name}_temp")
 
-        df = self.con.sql(f"SELECT * FROM {table_name}").df()
-
-        fractal = williams_fractal(df,
-                                   self.params["candle_price_point"],
-                                   self.params["fractal_period"])
-
-        temp_table = f"temp_{table_name}_fractals"
-        self.con.execute(f"DROP TABLE IF EXISTS {temp_table}")
-        self.con.execute(f"""
-            CREATE TABLE {temp_table} AS
+        self.con.sql(f"""
+            CREATE TABLE {table_name}_temp AS
+            WITH fractals AS (
+                SELECT
+                    datetime,
+                    CASE
+                        WHEN current_high = window_max THEN true
+                        ELSE false
+                    END as uf,
+                    CASE
+                        WHEN current_low = window_min THEN true
+                        ELSE false
+                    END as lf
+                FROM (
+                    SELECT
+                        *,
+                        MAX(CASE
+                            WHEN '{self.params.get('candle_price_point')}' =
+                                'high_low' THEN high
+                            ELSE close
+                        END) OVER (
+                            ORDER BY date
+                            ROWS BETWEEN {self.params.get('fractal_period')}
+                                PRECEDING AND {self.params.get('fractal_period')}
+                                FOLLOWING
+                        ) as window_max,
+                        MIN(CASE
+                            WHEN '{self.params.get('candle_price_point')}' =
+                                'high_low' THEN low
+                            ELSE close
+                        END) OVER (
+                            ORDER BY date
+                            ROWS BETWEEN {self.params.get('fractal_period')}
+                                PRECEDING AND {self.params.get('fractal_period')}
+                                FOLLOWING
+                        ) as window_min,
+                        CASE
+                            WHEN '{self.params.get('candle_price_point')}' =
+                                'high_low' THEN high
+                            ELSE close
+                        END as current_high,
+                        CASE
+                            WHEN '{self.params.get('candle_price_point')}' =
+                                'high_low' THEN low
+                            ELSE close
+                        END as current_low
+                    FROM {table_name}
+                ) AS subq
+            )
             SELECT
-                row_number() OVER () - 1 as idx,
-                lf as fractal_lf,
-                uf as fractal_uf
-            FROM fractal
+                t.*,
+                f.uf AS uf_temp,
+                f.lf AS lf_temp
+            FROM {table_name} t
+            LEFT JOIN fractals f ON t.datetime = f.datetime
+            ORDER BY t.datetime;
         """)
 
-        # Join with renamed columns
-        df = self.con.sql(f"""
-            SELECT a.*, b.fractal_lf, b.fractal_uf
-            FROM df a
-            LEFT JOIN {temp_table} b ON a.idx = b.idx
-        """).df()
+        self.con.sql(f"""
+            UPDATE {table_name}
+            SET uf = {table_name}_temp.uf_temp,
+                lf = {table_name}_temp.lf_temp
+            FROM {table_name}_temp
+            WHERE {table_name}.datetime = {table_name}_temp.datetime
+        """)
 
-        # Filter fractals and continue processing
-        df = df[(df['fractal_uf'] == 1) | (df['fractal_lf'] == 1)]
-        df['fractal_period'] = self.params["fractal_period"]
+        self._drop_fractal_table(f"{table_name}_temp")
 
 
 params = {
@@ -140,5 +188,3 @@ data_foundation_builder = DataFoundationBuilder("./database/clarity.db", params)
 data_foundation_builder.create_fractal_cluster_data("tbl_EOD_EURAUD_d_fractals")
 data = data_foundation_builder.get_table("tbl_EOD_EURAUD_d_fractals")
 print(data)
-
-
