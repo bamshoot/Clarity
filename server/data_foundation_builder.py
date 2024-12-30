@@ -1,7 +1,6 @@
 # import pandas as pd
-# import kmeans1d
+import kmeans1d
 import duckdb
-# import numpy as np
 import math
 
 
@@ -55,11 +54,40 @@ class DataFoundationBuilder:
             ALTER TABLE {fractal_table_name}
             ADD COLUMN lf BOOLEAN
         """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN clust INTEGER
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN cent DOUBLE
+        """)
 
     def _reset_table(self, table_name: str, fractal_table_name: str):
         self._drop_fractal_table(fractal_table_name)
         self._create_fractal_table(table_name, fractal_table_name)
         self._add_columns_to_fractal_table(fractal_table_name)
+
+    def generate_cluster_data(self,
+                              table_name: str,
+                              candle_price_point: str,
+                              cluster_count: int = 5):
+
+        df = self._get_table_from_db(table_name).to_df()
+
+        clusters, centroids = kmeans1d.cluster(df[candle_price_point],
+                                               cluster_count)
+
+        cent_clust = [centroids[clust] for clust in clusters]
+
+        df['cent'] = cent_clust
+        df['clust'] = clusters
+
+        self.con.execute(f"DROP TABLE IF EXISTS {table_name}")
+        self.con.execute(f"""
+            CREATE TABLE {table_name} AS
+            SELECT * FROM df
+        """)
 
     def get_table(self, table_name: str):
         return self.con.sql(f"SELECT * FROM {table_name}")
@@ -164,14 +192,34 @@ class DataFoundationBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {table_name}
-            SET uf = {table_name}_temp.uf_temp,
-                lf = {table_name}_temp.lf_temp
-            FROM {table_name}_temp
-            WHERE {table_name}.datetime = {table_name}_temp.datetime
+            UPDATE {table_name} t
+            SET uf = temp.uf_temp,
+                lf = temp.lf_temp
+            FROM {table_name}_temp temp
+            WHERE t.datetime = temp.datetime
         """)
 
         self._drop_fractal_table(f"{table_name}_temp")
+
+        self.con.sql(f"""
+            CREATE TABLE {table_name}_temp AS
+            SELECT * FROM {table_name}
+            WHERE uf = true OR lf = true
+            ORDER BY idx
+        """)
+
+        self._drop_fractal_table(f"{table_name}")
+
+        self.con.sql(f"""
+            CREATE TABLE {table_name} AS
+            SELECT * FROM {table_name}_temp
+        """)
+
+        self._drop_fractal_table(f"{table_name}_temp")
+
+        self.generate_cluster_data(table_name,
+                                   self.params.get("candle_price_point"),
+                                   self.params.get("cluster_count"))
 
 
 params = {
