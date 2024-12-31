@@ -3,3 +3,4 @@ venv/
 data/
 clarity.db
 logs/
+outputs/

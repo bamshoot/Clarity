@@ -2,6 +2,7 @@
 import kmeans1d
 import duckdb
 import math
+import time
 
 
 class DataFoundationBuilder:
@@ -20,7 +21,7 @@ class DataFoundationBuilder:
             self.con.close()
 
     def _get_table_from_db(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name}")
+        return self.con.sql(f"SELECT * FROM {table_name} ORDER BY datetime")
 
     def _drop_fractal_table(self, table_name: str):
         self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
@@ -32,11 +33,11 @@ class DataFoundationBuilder:
     def _add_columns_to_fractal_table(self, fractal_table_name: str):
         self.con.sql(f"""
             ALTER TABLE {fractal_table_name}
-            ADD COLUMN last_candle_price DOUBLE
+            ADD COLUMN lastCandlePrice DOUBLE
         """)
         self.con.sql(f"""
             ALTER TABLE {fractal_table_name}
-            ADD COLUMN dist_last_candle DOUBLE
+            ADD COLUMN distLstCandle DOUBLE
         """)
         self.con.sql(f"""
             ALTER TABLE {fractal_table_name}
@@ -61,6 +62,38 @@ class DataFoundationBuilder:
         self.con.sql(f"""
             ALTER TABLE {fractal_table_name}
             ADD COLUMN cent DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN centDist DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN centDistLastCandle DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN centCount DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN idxExpMean DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN centCountRank DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN centDistLstCandleRank DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN idxExpMeanRank DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {fractal_table_name}
+            ADD COLUMN distLstCandleRank DOUBLE
         """)
 
     def _reset_table(self, table_name: str, fractal_table_name: str):
@@ -97,17 +130,17 @@ class DataFoundationBuilder:
         if self.params.get("candle_price_point") == "close":
             self.con.sql(f"""
                 UPDATE {table_name}
-                SET last_candle_price = (SELECT close FROM {table_name}
+                SET lastCandlePrice = (SELECT close FROM {table_name}
                                          ORDER BY date DESC LIMIT 1),
-                    dist_last_candle = abs((SELECT close FROM {table_name}
+                    distLstCandle = abs((SELECT close FROM {table_name}
                                             ORDER BY date DESC LIMIT 1) - close)
             """)
         elif self.params.get("candle_price_point") == "high_low":
             self.con.sql(f"""
                 UPDATE {table_name}
-                SET last_candle_price = (SELECT (high + low) / 2 FROM {table_name}
+                SET lastCandlePrice = (SELECT (high + low) / 2 FROM {table_name}
                                          ORDER BY date DESC LIMIT 1),
-                    dist_last_candle = abs((SELECT (high + low) / 2 FROM
+                    distLstCandle = abs((SELECT (high + low) / 2 FROM
                                             {table_name} ORDER BY date DESC
                                             LIMIT 1) - (high + low) / 2)
             """)
@@ -221,6 +254,71 @@ class DataFoundationBuilder:
                                    self.params.get("candle_price_point"),
                                    self.params.get("cluster_count"))
 
+        self.con.sql(f"""
+            UPDATE {table_name}
+            SET centDist = abs(cent - close)
+        """)
+
+        self.con.sql(f"""
+            DELETE FROM {table_name}
+            WHERE centDist > (
+                SELECT * FROM (
+                    SELECT (MAX(close) - MIN(close))* {
+                        self.params.get('outlier_threshold')}
+                    FROM {table_name}
+                )
+            )
+        """)
+
+        self.con.sql(f"""
+            UPDATE {table_name}
+            SET centDistLastCandle = abs(cent - lastCandlePrice)
+        """)
+
+        self.con.sql(f"""
+            UPDATE {table_name} t
+            SET centCount = sub.cnt,
+                idxExpMean = sub.i_mean
+            FROM (
+                SELECT
+                    datetime,
+                    COUNT(*) OVER (PARTITION BY clust) as cnt,
+                    AVG(idxExp) OVER (PARTITION BY clust) as i_mean
+                FROM {table_name}
+            ) sub
+            WHERE t.datetime = sub.datetime
+        """)
+
+        self.con.sql(f"""
+            UPDATE {table_name} t
+            SET centCountRank = sub.cnt_rank,
+                centDistLstCandleRank = sub.cent_dist_last_candle_rank,
+                idxExpMeanRank = sub.idx_exp_mean_rank,
+                distLstCandleRank = sub.dist_last_candle_rank
+
+            FROM (
+                SELECT
+                    datetime,
+                    DENSE_RANK()
+                        OVER (ORDER BY centCount DESC)
+                        AS cnt_rank,
+                    DENSE_RANK()
+                        OVER (ORDER BY centDistLastCandle ASC)
+                        AS cent_dist_last_candle_rank,
+                    DENSE_RANK()
+                        OVER (ORDER BY idxExpMean DESC)
+                        AS idx_exp_mean_rank,
+                    DENSE_RANK()
+                        OVER (
+                            PARTITION BY clust
+                            ORDER BY distLstCandle ASC
+                        )
+                        AS dist_last_candle_rank
+                FROM {table_name}
+            ) sub
+            WHERE t.datetime = sub.datetime
+        """)
+
 
 params = {
     "data_source": "EOD",
@@ -229,10 +327,17 @@ params = {
     "candle_price_point": "close",
     "fractal_period": 3,
     "cluster_count": 10,
+    "outlier_threshold": 0.02
 }
 
+
+start_time = time.time()
 
 data_foundation_builder = DataFoundationBuilder("./database/clarity.db", params)
 data_foundation_builder.create_fractal_cluster_data("tbl_EOD_EURAUD_d_fractals")
 data = data_foundation_builder.get_table("tbl_EOD_EURAUD_d_fractals")
 print(data)
+data.write_csv("./outputs/fractal_data.csv")
+
+end_time = time.time()
+print(f"Time taken: {end_time - start_time} seconds")
