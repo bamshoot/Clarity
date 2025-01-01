@@ -6,25 +6,46 @@ import time
 
 
 class DataFoundationBuilder:
-    def __init__(self, db_path: str, params: dict):
+    def __init__(self,
+                 db_path: str,
+                 data_source: str,
+                 instrument_name: str,
+                 timeframe: str,
+                 fractal_period: int,
+                 cluster_count: int,
+                 outlier_threshold: float,
+                 candle_price_point: str,
+                 to_csv: bool = False):
         self.db_path = db_path
         self.con = duckdb.connect(self.db_path)
-        self.params = params
-        self.table_name = (f"tbl_{self.params['data_source']}"
-                           f"_{self.params['instrument_name']}"
-                           f"_{self.params['timeframe']}")
+        self.data_source = data_source
+        self.instrument_name = instrument_name
+        self.timeframe = timeframe
+        self.fractal_period = fractal_period
+        self.cluster_count = cluster_count
+        self.outlier_threshold = outlier_threshold
+        self.candle_price_point = candle_price_point
+        self.to_csv = to_csv
+        self.table_name = (f"tbl_{self.data_source}"
+                           f"_{self.instrument_name}"
+                           f"_{self.timeframe}")
         self.fractal_table_name = (f"{self.table_name}_"
-                                   f"f{self.params.get('fractal_period')}_"
-                                   f"k{self.params.get('cluster_count')}")
+                                   f"f{self.fractal_period}_"
+                                   f"k{self.cluster_count}")
         self._reset_table(self.table_name, self.fractal_table_name)
         self.threshold = self.con.sql(f"""
-            SELECT (MAX(close) - MIN(close)) * {self.params.get('outlier_threshold')}
+            SELECT (MAX(close) - MIN(close)) * {self.outlier_threshold}
             FROM {self.table_name}
         """).fetchone()[0]
 
     def __del__(self):
         if hasattr(self, 'con'):
             self.con.close()
+
+    def _to_csv(self, table_name: str):
+        self.con.sql(f"""
+            SELECT * FROM {table_name} ORDER BY datetime
+        """).write_csv(f"./outputs/{table_name}.csv")
 
     def _get_table_from_db(self, table_name: str):
         return self.con.sql(f"SELECT * FROM {table_name} ORDER BY datetime")
@@ -110,19 +131,19 @@ class DataFoundationBuilder:
     def _generate_input_data(self, fractal_table_name: str):
         self.con.sql(f"""
             UPDATE {fractal_table_name}
-            SET f = {self.params.get('fractal_period')}
+            SET f = {self.fractal_period}
         """)
         self.con.sql(f"""
             UPDATE {fractal_table_name}
-            SET k = {self.params.get('cluster_count')}
+            SET k = {self.cluster_count}
         """)
         self.con.sql(f"""
             UPDATE {fractal_table_name}
-            SET o = {self.params.get('outlier_threshold')}
+            SET o = {self.outlier_threshold}
         """)
 
     def _generate_last_candle_price(self, fractal_table_name: str):
-        if self.params.get("candle_price_point") == "close":
+        if self.candle_price_point == "close":
             self.con.sql(f"""
                 UPDATE {fractal_table_name}
                 SET lstCandlePrice = (SELECT close FROM {fractal_table_name}
@@ -130,7 +151,7 @@ class DataFoundationBuilder:
                     distLstCandle = abs((SELECT close FROM {fractal_table_name}
                                             ORDER BY date DESC LIMIT 1) - close)
             """)
-        elif self.params.get("candle_price_point") == "high_low":
+        elif self.candle_price_point == "high_low":
             self.con.sql(f"""
                 UPDATE {fractal_table_name}
                 SET lstCandlePrice = (SELECT (high + low) / 2 FROM {fractal_table_name}
@@ -180,32 +201,32 @@ class DataFoundationBuilder:
                     SELECT
                         *,
                         MAX(CASE
-                            WHEN '{self.params.get('candle_price_point')}' =
+                            WHEN '{self.candle_price_point}' =
                                 'high_low' THEN high
                             ELSE close
                         END) OVER (
                             ORDER BY date
-                            ROWS BETWEEN {self.params.get('fractal_period')}
-                                PRECEDING AND {self.params.get('fractal_period')}
+                            ROWS BETWEEN {self.fractal_period}
+                                PRECEDING AND {self.fractal_period}
                                 FOLLOWING
                         ) as window_max,
                         MIN(CASE
-                            WHEN '{self.params.get('candle_price_point')}' =
+                            WHEN '{self.candle_price_point}' =
                                 'high_low' THEN low
                             ELSE close
                         END) OVER (
                             ORDER BY date
-                            ROWS BETWEEN {self.params.get('fractal_period')}
-                                PRECEDING AND {self.params.get('fractal_period')}
+                            ROWS BETWEEN {self.fractal_period}
+                                PRECEDING AND {self.fractal_period}
                                 FOLLOWING
                         ) as window_min,
                         CASE
-                            WHEN '{self.params.get('candle_price_point')}' =
+                            WHEN '{self.candle_price_point}' =
                                 'high_low' THEN high
                             ELSE close
                         END as current_high,
                         CASE
-                            WHEN '{self.params.get('candle_price_point')}' =
+                            WHEN '{self.candle_price_point}' =
                                 'high_low' THEN low
                             ELSE close
                         END as current_low
@@ -339,14 +360,17 @@ class DataFoundationBuilder:
         self._generate_index_data(fractal_table_name)
         self._generate_fractal_data(fractal_table_name)
         self._generate_cluster_data(fractal_table_name,
-                                    self.params.get("candle_price_point"),
-                                    self.params.get("cluster_count"))
+                                    self.candle_price_point,
+                                    self.cluster_count)
         self._generate_cent_dist(fractal_table_name)
         self._remove_outliers(fractal_table_name)
         self._generate_cent_dist_lst_candle(fractal_table_name)
         self._generate_cent_count(fractal_table_name)
         self._generate_idx_exp_mean(fractal_table_name)
         self._generate_score(fractal_table_name)
+
+        if self.to_csv:
+            self._to_csv(fractal_table_name)
 
 
 instrument_params = {
@@ -360,8 +384,12 @@ instrument_params = {
 }
 params = {
     "data_source": "EOD",
-    "instruments": ["EURAUD"],
-    "timeframes": ["d"],
+    "instruments": [
+        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF", "USDCAD", "NZDUSD",
+        "EURGBP", "EURJPY", "EURAUD", "EURCHF", "EURCAD", "EURNZD", "GBPJPY",
+        "GBPAUD", "GBPCHF", "GBPCAD", "GBPNZD", "AUDJPY", "AUDCHF", "AUDCAD",
+        "AUDNZD", "CHFJPY", "CADJPY", "NZDJPY", "CADCHF", "NZDCHF", "NZDCAD"],
+    "timeframes": ["1h", "d", "w", "m"],
     "candle_price_point": "close",
 }
 
@@ -414,7 +442,15 @@ cluster_params = {
 start_time = time.time()
 
 data_foundation_builder = DataFoundationBuilder("./database/clarity.db",
-                                                instrument_params)
+                                                "EOD",
+                                                "EURAUD",
+                                                "d",
+                                                3,
+                                                10,
+                                                0.02,
+                                                "close",
+                                                to_csv=True)
+
 data_foundation_builder.build_fractal_clusters("tbl_EOD_EURAUD_d_f3_k10")
 data = data_foundation_builder.get_table("tbl_EOD_EURAUD_d_f3_k10")
 print(data)

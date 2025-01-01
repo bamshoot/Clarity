@@ -2,5 +2,6 @@
 venv/
 data/
 clarity.db
+clarity copy.db
 logs/
 outputs/
