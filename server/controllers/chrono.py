@@ -168,6 +168,17 @@ class EODDataCollectionChrono(Chrono):
 
                 rows_added = con.execute(
                     f"""
+                    SELECT *
+                    FROM df_temp
+                    WHERE timestamp NOT IN (
+                        SELECT timestamp
+                        FROM {self.prefix}_{instrument}_{period}
+                    )
+                    """
+                )
+
+                con.execute(
+                    f"""
                     INSERT INTO {self.prefix}_{instrument}_{period}
                     SELECT * FROM df_temp
                     WHERE timestamp NOT IN (
@@ -202,7 +213,6 @@ class EODDataCollectionChrono(Chrono):
             "5m": unix_time_now,
         }
 
-        print(time_comparison)
         for instrument, period in self.cross_rates_periods:
             table_name = f"{self.prefix}_{instrument}_{period}"
             try:
