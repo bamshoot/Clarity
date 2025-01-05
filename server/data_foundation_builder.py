@@ -1,6 +1,7 @@
 import kmeans1d
 import duckdb
 import time
+import os
 
 
 class DataFoundationBuilder:
@@ -45,7 +46,7 @@ class DataFoundationBuilder:
     def _to_csv(self, table_name: str):
         self.con.sql(f"""
             SELECT * FROM {table_name} ORDER BY datetime
-        """).write_csv(f"./outputs/{table_name}.csv")
+        """).write_csv(f"./outputs/fractals/{table_name}.csv")
 
     def _get_table_from_db(self, table_name: str):
         return self.con.sql(f"SELECT * FROM {table_name} ORDER BY datetime")
@@ -455,6 +456,163 @@ class DataFoundationBuilder:
             self._to_csv(fractal_table_name)
 
 
+class SupportResistanceBuilder:
+    def __init__(self,
+                 db_path: str,
+                 data_source: str):
+        self.db_path = db_path
+        self.con = duckdb.connect(self.db_path)
+        self.data_source = data_source
+        self.instrument_name = None
+        self.timeframe = None
+        self.fractal_period = None
+        self.cluster_count = None
+        self.table_name = (f"tbl_{self.data_source}_SupportResistance")
+        self.fractal_table_name = (f"{self.table_name}_"
+                                   f"f{self.fractal_period}_"
+                                   f"k{self.cluster_count}")
+
+    def __del__(self):
+        if hasattr(self, 'con'):
+            self.con.close()
+
+    def get_table_from_db(self, table_name: str):
+        return self.con.sql(f"SELECT * FROM {table_name}")
+
+    def drop_table(self, table_name: str):
+        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
+
+    def create_table(self, table_name: str):
+        self.con.sql(f"""
+            CREATE TABLE {table_name}
+            (
+                instrument_name VARCHAR,
+                timeframe VARCHAR,
+                clust INTEGER,
+                cent DOUBLE,
+                centDistMean DOUBLE,
+                centCount DOUBLE,
+                centDistLstCandle DOUBLE,
+                centDistLstCandleRank DOUBLE,
+                centDistMeanRank DOUBLE,
+                centCountRank DOUBLE,
+                score DOUBLE,
+                overallRank DOUBLE
+            )
+        """)
+
+    def set_instrument_name(self, instrument_name: str):
+        self.instrument_name = instrument_name
+
+    def set_timeframe(self, timeframe: str):
+        self.timeframe = timeframe
+
+    def set_fractal_period(self, fractal_period: int):
+        self.fractal_period = fractal_period
+
+    def set_cluster_count(self, cluster_count: int):
+        self.cluster_count = cluster_count
+
+    def append_data_to_table(self, table_name: str, fractal_table_name: str):
+        self.con.sql(f"""
+            INSERT INTO {table_name}
+            SELECT DISTINCT '{self.instrument_name}' as instrument_name,
+                   '{self.timeframe}' as timeframe,
+                   clust, cent, centDistMean, centCount, centDistLstCandle,
+                   centDistLstCandleRank, centDistMeanRank, centCountRank,
+                   score, overallRank
+            FROM {fractal_table_name}
+        """)
+
+    def to_csv(self, table_name: str):
+        self.con.sql(f"""
+            SELECT * FROM {table_name} ORDER BY instrument_name, timeframe, clust
+        """).write_csv(f"./outputs/sr/{table_name}.csv")
+
+
+class PinescriptBuilder:
+    def __init__(self, db_path: str, data_source: str):
+        self.db_path = db_path
+        self.con = duckdb.connect(self.db_path)
+        self.data_source = data_source
+        self.table_name = (f"tbl_{self.data_source}_SupportResistance")
+
+    def __del__(self):
+        if hasattr(self, 'con'):
+            self.con.close()
+
+    def _get_table_from_db(self, table_name: str):
+        return self.con.sql(f"SELECT * FROM {table_name}")
+
+    def _reset_pinescript_file(self):
+        for file in os.listdir("./outputs/pinescript"):
+            with open(f"./outputs/pinescript/{file}", "w") as f:
+                instrument_name = file.split("_")[1]
+                instrument_name = instrument_name.replace(".txt", "")
+                f.write(f"""
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
+// at https://mozilla.org/MPL/2.0/
+// © bamshoot
+
+//@version=6
+indicator("{instrument_name} Support And Resistance", overlay = true)
+
+show_1h = input(defval = true, title = "Show 1 Hour SR")
+show_d = input(defval = true, title = "Show Daily SR")
+show_w = input(defval = true, title = "Show Weekly SR")
+show_m = input(defval = true, title = "Show Monthly SR")
+show_label = input(defval = true, title = "Show Labels")
+label_position = input(defval = 400, title ="Label Back Position")
+
+symbol = syminfo.ticker
+
+""")
+
+    def build_pinescript(self, table_name: str):
+        self._reset_pinescript_file()
+
+        sr = self._get_table_from_db(table_name).fetchall()
+
+        show_timeframe = None
+        color = None
+
+        for row in sr:
+
+            instrument_name = row[0]
+
+            if row[1] == "1h":
+                show_timeframe = "show_1h"
+                color = "color.yellow"
+            elif row[1] == "d":
+                show_timeframe = "show_d"
+                color = "color.blue"
+            elif row[1] == "w":
+                show_timeframe = "show_w"
+                color = "color.orange"
+            elif row[1] == "m":
+                show_timeframe = "show_m"
+                color = "color.red"
+
+            file_name = f"{self.data_source}_{instrument_name}"
+
+            with open(f"./outputs/pinescript/{file_name}.txt", "a") as f:
+                f.write(f"""plot({show_timeframe} and"""
+                        f""" symbol == '{row[0]}'?{row[3]:.4f}:na,"""
+                        f""" "Cluster = {row[2]}","""
+                        f""" color = {color},"""
+                        f""" editable = true)\n"""
+                        f"""if (bar_index == last_bar_index) and show_label"""
+                        f""" and {show_timeframe}\n"""
+                        f"""    label.new(x=bar_index-label_position, """
+                        f"""y={row[3]:.4f}, """
+                        f"""text = str.tostring({row[3]:.4f}), color={color}, """
+                        f"""textcolor=color.white, tooltip = "Cent Distance Mean = """
+                        f"""{row[4]:.4f}\\nCent Count = {row[5]}\\nCent """
+                        f"""Distance Mean Rank = {row[8]}\\nCent Count Rank = """
+                        f"""{row[9]}\\nScore = {row[10]:.4f}\\n"""
+                        f"""Overall Rank = {row[11]}")\n""")
+
+
 params = {
     "data_source": "EOD",
     "instruments": [
@@ -473,6 +631,8 @@ params = {
 
 
 start_time = time.time()
+
+print("Building data foundation")
 
 for instrument in params["instruments"]:
 
@@ -498,6 +658,41 @@ for instrument in params["instruments"]:
                     params["to_csv"])
 
         data_foundation_builder.build_fractal_clusters(fractal_table_name)
+
+print("Appending data to support resistance table")
+
+support_resistance_builder = SupportResistanceBuilder(
+    "./database/clarity.db",
+    "EOD")
+
+support_resistance_builder.drop_table(support_resistance_builder.table_name)
+support_resistance_builder.create_table(support_resistance_builder.table_name)
+
+for instrument in params["instruments"]:
+    for timeframe in params["timeframes"]:
+        fractal_table_name = (f"tbl_EOD_{instrument}_"
+                              f"{timeframe}_"
+                              f"f{params['fractal_period']}_"
+                              f"k{params['cluster_count']}")
+
+        support_resistance_builder.set_instrument_name(instrument)
+        support_resistance_builder.set_timeframe(timeframe)
+        support_resistance_builder.set_fractal_period(params["fractal_period"])
+        support_resistance_builder.set_cluster_count(params["cluster_count"])
+
+        support_resistance_builder.append_data_to_table(
+            support_resistance_builder.table_name,
+            fractal_table_name)
+
+if params["to_csv"]:
+    support_resistance_builder.to_csv(support_resistance_builder.table_name)
+
+
+print("Building pinescript")
+
+pinescript_builder = PinescriptBuilder("./database/clarity.db", "EOD")
+
+pinescript_builder.build_pinescript(pinescript_builder.table_name)
 
 end_time = time.time()
 print(f"Time taken: {end_time - start_time} seconds")
