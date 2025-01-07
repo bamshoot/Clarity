@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 
 class EODCandle(BaseModel):
@@ -25,9 +25,11 @@ class EODCandle(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         if self.datetime_ is None and self.date_ is not None:
-            self.datetime_ = datetime.combine(self.date_, datetime.min.time())
+            self.datetime_ = datetime.combine(self.date_, datetime.min.time(),
+                                              tzinfo=timezone.utc)
         elif self.datetime_ is None and self.timestamp is not None:
-            self.datetime_ = datetime.fromtimestamp(self.timestamp)
+            self.datetime_ = datetime.fromtimestamp(self.timestamp,
+                                                    tz=timezone.utc)
 
         if self.date_ is None and self.datetime_ is not None:
             self.date_ = self.datetime_.date()

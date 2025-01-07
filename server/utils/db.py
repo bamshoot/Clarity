@@ -1,5 +1,5 @@
 import duckdb
-# import pprint
+import pprint
 
 
 def list_tables(db_path):
@@ -24,8 +24,8 @@ def drop_table(db_path, table_name):
         con.sql(f"DROP TABLE IF EXISTS {table_name}")
 
 
-# pprint.pprint(list_tables("./database/clarity.db"))
+pprint.pprint(list_tables("./database/clarity.db"))
 # drop_tables("./database/clarity.db")
 # drop_table("./database/clarity.db", "tbl_EOD_AUDCAD_d")
 
-get_table("./database/clarity.db", "tbl_EOD_AUDCAD_d")
+# get_table("./database/clarity.db", "tbl_EOD_AUDCAD_d")

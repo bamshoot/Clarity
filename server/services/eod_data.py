@@ -5,7 +5,7 @@ from dateutil.relativedelta import relativedelta
 
 class EODData:
 
-    def __init__(self, base_url, api_key, fmt="json"):
+    def __init__(self, base_url, api_key):
         self.client = httpx.AsyncClient()
         self.base_url = base_url
         self.api_key = api_key
@@ -22,13 +22,11 @@ class EODData:
         ticker: str,
         exchange: str,
         interval: str,
-        from_date_time=None,
         fmt: str = "json",
     ):
         endpoint = "eod" if interval in ["d", "w", "m"] else "intraday"
         params = {
             "period" if endpoint == "eod" else "interval": interval,
-            "from": from_date_time,
             "fmt": fmt,
             "api_token": self.api_key,
         }

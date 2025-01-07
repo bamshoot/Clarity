@@ -762,44 +762,67 @@ class TrendIndicatorBuilder:
 
         data = self._get_table_from_db(self.source_table_name).fetchnumpy()
 
+        # if self.timeframe == "d":
+        #     print(data['date'][-1:-5:-1])
+        #     print(data['close'][-1:-5:-1])
+
         close_prices = data['close']
 
-        sma_run = ta.SMA(close_prices, run_length)
-        sma_trend = ta.SMA(close_prices, trend_length)
         sma_major_trend = ta.SMA(close_prices, major_trend_length)
+        sma_trend = ta.SMA(close_prices, trend_length)
+        sma_run = ta.SMA(close_prices, run_length)
 
-        slope_run = round(ta.LINEARREG_SLOPE(
-            sma_run, 2)[-1]*100, 2)
-        slope_trend = round(ta.LINEARREG_SLOPE(
-            sma_trend, 2)[-1]*100, 2)
+        if "JPY" in self.instrument_name:
+            factor = 100
+        else:
+            factor = 10000
+
         slope_major_trend = round(ta.LINEARREG_SLOPE(
-            sma_major_trend, 2)[-1]*100, 2)
+            sma_major_trend, 2)[-1]*factor, 2)
+        slope_trend = round(ta.LINEARREG_SLOPE(
+            sma_trend, 2)[-1]*factor, 2)
+        slope_run = round(ta.LINEARREG_SLOPE(
+            sma_run, 2)[-1]*factor, 2)
 
-        run_slope_type = None
-        trend_slope_type = None
+        # if self.timeframe == "d":
+        #     slope_major_trend_print = ta.LINEARREG_SLOPE(
+        #         sma_major_trend, 2)[-1:-5:-1]*100
+        #     slope_trend_print = ta.LINEARREG_SLOPE(
+        #         sma_trend, 2)[-1:-5:-1]*100
+        #     slope_run_print = ta.LINEARREG_SLOPE(
+        #         sma_run, 2)[-1:-5:-1]*100
+
+        #     print(self.instrument_name)
+        #     print(slope_major_trend_print.round(2))
+        #     print(slope_trend_print.round(2))
+        #     print(slope_run_print.round(2))
+        #     print("--------------------------------")
+
         major_trend_slope_type = None
-
-        if slope_run > threshold:
-            run_slope_type = "Up"
-        elif slope_run < -threshold:
-            run_slope_type = "Down"
-
-        if slope_trend > threshold:
-            trend_slope_type = "Up"
-        elif slope_trend < -threshold:
-            trend_slope_type = "Down"
+        trend_slope_type = None
+        run_slope_type = None
 
         if slope_major_trend > threshold:
             major_trend_slope_type = "Up"
         elif slope_major_trend < -threshold:
             major_trend_slope_type = "Down"
 
-        trend_id = f"{run_slope_type}{trend_slope_type}{major_trend_slope_type}"
+        if slope_trend > threshold:
+            trend_slope_type = "Up"
+        elif slope_trend < -threshold:
+            trend_slope_type = "Down"
+
+        if slope_run > threshold:
+            run_slope_type = "Up"
+        elif slope_run < -threshold:
+            run_slope_type = "Down"
+
+        trend_id = f"{major_trend_slope_type}{trend_slope_type}{run_slope_type}"
 
         self._append_instrument_trends(trend_id,
-                                       slope_run,
+                                       slope_major_trend,
                                        slope_trend,
-                                       slope_major_trend)
+                                       slope_run)
 
 
 params = {
@@ -883,6 +906,7 @@ start_time = time.time()
 
 # pinescript_builder.build_pinescript(pinescript_builder.table_name)
 
+print("Building trend indicator")
 
 trend_indicator_builder = TrendIndicatorBuilder("./database/clarity.db", "EOD")
 
