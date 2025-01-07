@@ -3,7 +3,7 @@ import duckdb
 import time
 import os
 import talib as ta
-import numpy as np
+import json
 
 
 class DataFoundationBuilder:
@@ -624,6 +624,7 @@ class TrendIndicatorBuilder:
         self.timeframe = None
         self.source_table_name = None
         self.table_name = (f"tbl_{self.data_source}_Trends")
+        self._reset_trends_table()
 
     def __del__(self):
         if hasattr(self, 'con'):
@@ -633,20 +634,77 @@ class TrendIndicatorBuilder:
         return self.con.sql(f"SELECT * FROM {table_name}")
 
     def _reset_trends_table(self):
-        self.drop_table(self.table_name)
-        self.create_table(self.table_name)
+        self._drop_table(self.table_name)
+        self._drop_table("tbl_trend_params")
+        self._create_trend_params_table_from_json()
+        self._create_trends_table()
 
-    def create_trends_table(self):
+    def _drop_table(self, table_name: str):
+        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
+
+    def _create_trend_params_table_from_json(self):
+        with open("./config/settings/trends.json", "r") as f:
+            trend_params = json.load(f)
+
+        self.con.sql("""
+            CREATE TABLE tbl_trend_params
+            (
+                trend_id VARCHAR,
+                major_trend_slope_type VARCHAR,
+                trend_slope_type VARCHAR,
+                run_slope_type VARCHAR,
+                major_trend_to_trend VARCHAR,
+                trend_to_run VARCHAR,
+                status VARCHAR,
+                bias VARCHAR,
+                objective_status VARCHAR,
+                rank_bias VARCHAR,
+                rank_major_trend_to_trend VARCHAR,
+                rank_trend_to_run VARCHAR,
+                overall_rank VARCHAR
+            )
+        """)
+
+        for trend_id, trend_params in trend_params.items():
+            self.con.sql(f"""
+                INSERT INTO tbl_trend_params
+                VALUES ('{trend_id}',
+                        '{trend_params['major_trend_slope_type']}',
+                        '{trend_params['trend_slope_type']}',
+                        '{trend_params['run_slope_type']}',
+                        '{trend_params['major_trend_to_trend']}',
+                        '{trend_params['trend_to_run']}',
+                        '{trend_params['status']}',
+                        '{trend_params['bias']}',
+                        '{trend_params['objective_status']}',
+                        '{trend_params['rank_bias']}',
+                        '{trend_params['rank_major_trend_to_trend']}',
+                        '{trend_params['rank_trend_to_run']}',
+                        '{trend_params['overall_rank']}')
+            """)
+
+    def _create_trends_table(self):
         self.con.sql(f"""
             CREATE TABLE {self.table_name}
             (
                 instrument_name VARCHAR,
                 timeframe VARCHAR,
-                trend_type VARCHAR,
-                trend_start_date DATE,
-                trend_end_date DATE,
-                trend_length INT,
-                trend_strength DOUBLE
+                trend_id VARCHAR,
+                major_trend_slope_value DOUBLE,
+                trend_slope_value DOUBLE,
+                run_slope_value DOUBLE,
+                major_trend_slope_type VARCHAR,
+                trend_slope_type VARCHAR,
+                run_slope_type VARCHAR,
+                major_trend_to_trend VARCHAR,
+                trend_to_run VARCHAR,
+                status VARCHAR,
+                bias VARCHAR,
+                objective_status VARCHAR,
+                rank_bias VARCHAR,
+                rank_major_trend_to_trend VARCHAR,
+                rank_trend_to_run VARCHAR,
+                overall_rank VARCHAR
             )
         """)
 
@@ -656,48 +714,92 @@ class TrendIndicatorBuilder:
     def set_timeframe(self, timeframe: str):
         self.timeframe = timeframe
 
-    def set_source_table_name(self, source_table_name: str):
+    def set_source_table_name(self):
         self.source_table_name = (f"tbl_{self.data_source}_"
                                   f"{self.instrument_name}_"
                                   f"{self.timeframe}")
 
-    def shift_with_nan(self, array, shift):
-        result = np.empty_like(array)
-        result[:shift] = np.nan
-        result[shift:] = array[:-shift]
-        return result
+    def _append_instrument_trends(self,
+                                  trend_id,
+                                  major_trend_slope_value,
+                                  trend_slope_value,
+                                  run_slope_value):
+        self.con.sql(f"""
+            WITH trend_params AS (
+                SELECT major_trend_slope_type, trend_slope_type, run_slope_type,
+                       major_trend_to_trend, trend_to_run, status, bias,
+                       objective_status, rank_bias, rank_major_trend_to_trend,
+                       rank_trend_to_run, overall_rank
+                FROM tbl_trend_params
+                WHERE trend_id = '{trend_id}'
+            )
+            INSERT INTO {self.table_name}
+            SELECT '{self.instrument_name}' as instrument_name,
+                   '{self.timeframe}' as timeframe,
+                   '{trend_id}' as trend_id,
+                   {major_trend_slope_value}, {trend_slope_value}, {run_slope_value},
+                   major_trend_slope_type, trend_slope_type, run_slope_type,
+                   major_trend_to_trend, trend_to_run, status, bias,
+                   objective_status, rank_bias, rank_major_trend_to_trend,
+                   rank_trend_to_run, overall_rank
+            FROM trend_params
+        """)
+
+    def get_table(self, table_name: str):
+        return self.con.sql(f"SELECT * FROM {table_name}")
+
+    def to_csv(self, table_name: str):
+        self.con.sql(f"""
+            SELECT * FROM {table_name} ORDER BY instrument_name, timeframe
+        """).write_csv(f"./outputs/trends/{table_name}.csv")
 
     def generate_trends(self):
 
         run_length = 9
         trend_length = 20
         major_trend_length = 50
-        atr_length = 14
-        threshold = 25
-        smooth_length = 5
+        threshold = 10
 
         data = self._get_table_from_db(self.source_table_name).fetchnumpy()
 
-        high_prices = data['high']
-        low_prices = data['low']
         close_prices = data['close']
 
-        atr = ta.ATR(high_prices, low_prices, close_prices, atr_length)
+        sma_run = ta.SMA(close_prices, run_length)
+        sma_trend = ta.SMA(close_prices, trend_length)
+        sma_major_trend = ta.SMA(close_prices, major_trend_length)
 
-        run_reg = ta.LINEARREG(close_prices, run_length)
-        run_reg_prev = ta.LINEARREG(self.shift_with_nan(close_prices, 1), run_length)
+        slope_run = round(ta.LINEARREG_SLOPE(
+            sma_run, 2)[-1]*100, 2)
+        slope_trend = round(ta.LINEARREG_SLOPE(
+            sma_trend, 2)[-1]*100, 2)
+        slope_major_trend = round(ta.LINEARREG_SLOPE(
+            sma_major_trend, 2)[-1]*100, 2)
 
-        trend_reg = ta.LINEARREG(close_prices, trend_length)
-        trend_reg_prev = ta.LINEARREG(self.shift_with_nan(close_prices, 1), trend_length)
+        run_slope_type = None
+        trend_slope_type = None
+        major_trend_slope_type = None
 
-        major_trend_reg = ta.LINEARREG(close_prices, major_trend_length)
-        major_trend_reg_prev = ta.LINEARREG(self.shift_with_nan(close_prices, 1), major_trend_length)
+        if slope_run > threshold:
+            run_slope_type = "Up"
+        elif slope_run < -threshold:
+            run_slope_type = "Down"
 
-        run_slope_diff = ta.SMA((run_reg - run_reg_prev) / atr * 100, smooth_length)[-1]
-        trend_slope_diff = ta.SMA((trend_reg - trend_reg_prev) / atr * 100, smooth_length)[-1]
-        major_trend_slope_diff = ta.SMA((major_trend_reg - major_trend_reg_prev) / atr * 100, smooth_length)[-1]
+        if slope_trend > threshold:
+            trend_slope_type = "Up"
+        elif slope_trend < -threshold:
+            trend_slope_type = "Down"
 
-        print(self.instrument_name, self.timeframe, run_slope_diff, trend_slope_diff, major_trend_slope_diff)
+        if slope_major_trend > threshold:
+            major_trend_slope_type = "Up"
+        elif slope_major_trend < -threshold:
+            major_trend_slope_type = "Down"
+
+        trend_id = f"{run_slope_type}{trend_slope_type}{major_trend_slope_type}"
+
+        self._append_instrument_trends(trend_id,
+                                       slope_run,
+                                       slope_trend,
+                                       slope_major_trend)
 
 
 params = {
@@ -707,7 +809,7 @@ params = {
         "EURGBP", "EURJPY", "EURAUD", "EURCHF", "EURCAD", "EURNZD", "GBPJPY",
         "GBPAUD", "GBPCHF", "GBPCAD", "GBPNZD", "AUDJPY", "AUDCHF", "AUDCAD",
         "AUDNZD", "CHFJPY", "CADJPY", "NZDJPY", "CADCHF", "NZDCHF", "NZDCAD"],
-    "timeframes": [ "d"],
+    "timeframes": ["1h", "d", "w", "m"],
     "max_bars": 730,
     "candle_price_point": "close",
     "fractal_period": 2,
@@ -788,8 +890,11 @@ for instrument in params["instruments"]:
     for timeframe in params["timeframes"]:
         trend_indicator_builder.set_instrument_name(instrument)
         trend_indicator_builder.set_timeframe(timeframe)
-        trend_indicator_builder.set_source_table_name(trend_indicator_builder.table_name)
+        trend_indicator_builder.set_source_table_name()
         trend_indicator_builder.generate_trends()
+
+if params["to_csv"]:
+    trend_indicator_builder.to_csv(trend_indicator_builder.table_name)
 
 end_time = time.time()
 print(f"Time taken: {end_time - start_time} seconds")
