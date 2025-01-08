@@ -4,6 +4,9 @@ import time
 import os
 import talib as ta
 import json
+from services.eod_data import EODData
+from config.config import Config
+# import asyncio
 
 
 class DataFoundationBuilder:
@@ -758,63 +761,46 @@ class TrendIndicatorBuilder:
         run_length = 9
         trend_length = 20
         major_trend_length = 50
-        threshold = 10
+        run_threshold = 15
+        trend_threshold = 5
+        major_trend_threshold = 5
 
         data = self._get_table_from_db(self.source_table_name).fetchnumpy()
 
-        # if self.timeframe == "d":
-        #     print(data['date'][-1:-5:-1])
-        #     print(data['close'][-1:-5:-1])
-
         close_prices = data['close']
+        high_prices = data['high']
+        low_prices = data['low']
+
+        atr = ta.ATR(high_prices, low_prices, close_prices, 14)
 
         sma_major_trend = ta.SMA(close_prices, major_trend_length)
         sma_trend = ta.SMA(close_prices, trend_length)
         sma_run = ta.SMA(close_prices, run_length)
 
-        if "JPY" in self.instrument_name:
-            factor = 100
-        else:
-            factor = 10000
-
-        slope_major_trend = round(ta.LINEARREG_SLOPE(
-            sma_major_trend, 2)[-1]*factor, 2)
-        slope_trend = round(ta.LINEARREG_SLOPE(
-            sma_trend, 2)[-1]*factor, 2)
-        slope_run = round(ta.LINEARREG_SLOPE(
-            sma_run, 2)[-1]*factor, 2)
-
-        # if self.timeframe == "d":
-        #     slope_major_trend_print = ta.LINEARREG_SLOPE(
-        #         sma_major_trend, 2)[-1:-5:-1]*100
-        #     slope_trend_print = ta.LINEARREG_SLOPE(
-        #         sma_trend, 2)[-1:-5:-1]*100
-        #     slope_run_print = ta.LINEARREG_SLOPE(
-        #         sma_run, 2)[-1:-5:-1]*100
-
-        #     print(self.instrument_name)
-        #     print(slope_major_trend_print.round(2))
-        #     print(slope_trend_print.round(2))
-        #     print(slope_run_print.round(2))
-        #     print("--------------------------------")
+        slope_major_trend = round((ta.LINEARREG_SLOPE(
+            sma_major_trend, 2)[-1]/atr[-1])*100, 2)
+        slope_trend = round((ta.LINEARREG_SLOPE(
+            sma_trend, 2)[-1]/atr[-1])*100, 2)
+        slope_run = round((ta.LINEARREG_SLOPE(
+            sma_run, 2)[-1]/atr[-1])*100, 2)
 
         major_trend_slope_type = None
         trend_slope_type = None
         run_slope_type = None
 
-        if slope_major_trend > threshold:
+        if slope_major_trend > major_trend_threshold:
             major_trend_slope_type = "Up"
-        elif slope_major_trend < -threshold:
+        elif slope_major_trend < -major_trend_threshold:
             major_trend_slope_type = "Down"
 
-        if slope_trend > threshold:
+        if slope_trend > trend_threshold:
             trend_slope_type = "Up"
-        elif slope_trend < -threshold:
+        elif slope_trend < -trend_threshold:
             trend_slope_type = "Down"
 
-        if slope_run > threshold:
+        if slope_run > run_threshold:
             run_slope_type = "Up"
-        elif slope_run < -threshold:
+        elif slope_run < -run_threshold:
             run_slope_type = "Down"
 
         trend_id = f"{major_trend_slope_type}{trend_slope_type}{run_slope_type}"
@@ -823,6 +809,139 @@ class TrendIndicatorBuilder:
                                        slope_major_trend,
                                        slope_trend,
                                        slope_run)
+
+
+class PriceProximityBuilder:
+    def __init__(self, db_path: str, data_source: str):
+        self.db_path = db_path
+        self.con = duckdb.connect(self.db_path)
+        self.data_source = data_source
+        self.instrument_name = None
+        self.exchange = None
+        self.timeframe = None
+        self.source_table_name = None
+        self.sr_table_name = f"tbl_{self.data_source}_SupportResistance"
+        self.table_name = (f"tbl_{self.data_source}_PriceProximity")
+        self._reset_price_proximity_table()
+        config = Config()
+        self.eod_data_service = EODData(config.EOD_URL, config.EOD_API_KEY)
+
+    def __del__(self):
+        if hasattr(self, 'con'):
+            self.con.close()
+
+    def _get_table_from_db(self, table_name: str):
+        return self.con.sql(f"SELECT * FROM {table_name}")
+
+    def _reset_price_proximity_table(self):
+        self._drop_table(self.table_name)
+        self._create_price_proximity_table()
+
+    def set_instrument_name(self, instrument_name: str):
+        self.instrument_name = instrument_name
+
+    def set_exchange(self, exchange: str):
+        self.exchange = exchange
+
+    def set_timeframe(self, timeframe: str):
+        self.timeframe = timeframe
+
+    def set_source_table_name(self):
+        self.source_table_name = (f"tbl_{self.data_source}_"
+                                  f"{self.instrument_name}_"
+                                  f"{self.timeframe}")
+
+    def _drop_table(self, table_name: str):
+        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
+
+    def _create_price_proximity_table(self):
+
+        self.con.sql(f"""
+            CREATE TABLE {self.table_name}
+            AS SELECT * FROM {self.sr_table_name}
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.table_name} ADD COLUMN lst_price_timestamp BIGINT
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.table_name} ADD COLUMN lst_price DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.table_name} ADD COLUMN lst_price_cent_dist DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.table_name} ADD COLUMN atr DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.table_name} ADD COLUMN proximity DOUBLE
+        """)
+
+    async def _get_last_price(self):
+        last_price = await self.eod_data_service.get_last_price(
+            self.instrument_name,
+            self.exchange)
+
+        return last_price["timestamp"], last_price["close"]
+
+    def _get_atr(self):
+        data = self._get_table_from_db(self.source_table_name).fetchnumpy()
+        atr = ta.ATR(data["high"], data["low"], data["close"], 14)
+        return atr[-1]
+
+    async def append_price_atr(self):
+
+        timestamp, price = await self._get_last_price()
+        atr = self._get_atr()
+
+        self.con.sql(f"""
+            UPDATE {self.table_name}
+            SET lst_price_timestamp = {timestamp},
+                lst_price = {price},
+                atr = {atr}
+            WHERE instrument_name = '{self.instrument_name}'
+            AND timeframe = '{self.timeframe}'
+        """)
+
+    def calculate_price_proximity(self):
+
+        self.con.sql(f"""
+            UPDATE {self.table_name}
+            SET lst_price_cent_dist = lst_price - cent,
+                proximity = lst_price_cent_dist / atr
+        """)
+
+    def get_proximity_table(self):
+        return self.con.sql(f"""
+            SELECT * FROM {self.table_name}
+        """)
+
+    def to_csv(self, table_name: str):
+        self.con.sql(f"""
+            SELECT * FROM {table_name} ORDER BY instrument_name, timeframe
+        """).write_csv(f"./outputs/price_proximity/{table_name}.csv")
+
+
+class RSIRankBuilder:
+    def __init__(self, db_path: str, data_source: str):
+        self.db_path = db_path
+        self.con = duckdb.connect(self.db_path)
+        self.data_source = data_source
+        self.instrument_name = None
+        self.timeframe = None
+        self.source_table_name = None
+        self.table_name = (f"tbl_{self.data_source}_RSIRank")
+        self._reset_ranks_table()
+
+    def __del__(self):
+        if hasattr(self, 'con'):
+            self.con.close()
+
+    def _get_table_from_db(self, table_name: str):
+        return self.con.sql(f"SELECT * FROM {table_name}")
+
+    def _reset_ranks_table(self):
+        self._drop_table(self.table_name)
+        self._create_ranks_table()
 
 
 params = {
@@ -906,19 +1025,41 @@ start_time = time.time()
 
 # pinescript_builder.build_pinescript(pinescript_builder.table_name)
 
-print("Building trend indicator")
+# print("Building trend indicator")
 
-trend_indicator_builder = TrendIndicatorBuilder("./database/clarity.db", "EOD")
+# trend_indicator_builder = TrendIndicatorBuilder("./database/clarity.db", "EOD")
 
-for instrument in params["instruments"]:
-    for timeframe in params["timeframes"]:
-        trend_indicator_builder.set_instrument_name(instrument)
-        trend_indicator_builder.set_timeframe(timeframe)
-        trend_indicator_builder.set_source_table_name()
-        trend_indicator_builder.generate_trends()
+# for instrument in params["instruments"]:
+#     for timeframe in params["timeframes"]:
+#         trend_indicator_builder.set_instrument_name(instrument)
+#         trend_indicator_builder.set_timeframe(timeframe)
+#         trend_indicator_builder.set_source_table_name()
+#         trend_indicator_builder.generate_trends()
 
-if params["to_csv"]:
-    trend_indicator_builder.to_csv(trend_indicator_builder.table_name)
+# if params["to_csv"]:
+#     trend_indicator_builder.to_csv(trend_indicator_builder.table_name)
+
+# print("Building price proximity")
+
+
+# async def process_all_instruments():
+#     price_proximity_builder = PriceProximityBuilder("./database/clarity.db", "EOD")
+
+#     for instrument in params["instruments"]:
+#         for timeframe in params["timeframes"]:
+#             print(f"Building {instrument} {timeframe}")
+#             price_proximity_builder.set_instrument_name(instrument)
+#             price_proximity_builder.set_exchange("FOREX")
+#             price_proximity_builder.set_timeframe(timeframe)
+#             price_proximity_builder.set_source_table_name()
+#             await price_proximity_builder.append_price_atr()
+#             price_proximity_builder.calculate_price_proximity()
+
+#     if params["to_csv"]:
+#         price_proximity_builder.to_csv(price_proximity_builder.table_name)
+
+# # Replace the loop with:
+# asyncio.run(process_all_instruments())
 
 end_time = time.time()
 print(f"Time taken: {end_time - start_time} seconds")

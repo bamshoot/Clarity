@@ -1,0 +1,9 @@
+{
+    "exchange": "FOREX",
+    "fmt": "json",
+    "data_point": "close",
+    "periods": [ "5m"],
+    "cross_rates": [
+        "EURUSD"
+    ]
+}

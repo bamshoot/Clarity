@@ -1,6 +1,5 @@
 import httpx
 import duckdb
-from dateutil.relativedelta import relativedelta
 
 
 class EODData:
@@ -37,6 +36,43 @@ class EODData:
 
         return response.json()
 
+    async def get_candles_with_from(
+        self,
+        ticker: str,
+        exchange: str,
+        interval: str,
+        db_from: str,
+        fmt: str = "json",
+    ):
+        endpoint = "eod" if interval in ["d", "w", "m"] else "intraday"
+        params = {
+            "period" if endpoint == "eod" else "interval": interval,
+            "from": db_from,
+            "fmt": fmt,
+            "api_token": self.api_key,
+        }
+
+        url = f"{self.base_url}/{endpoint}/{ticker}.{exchange}"
+        response = await self.client.get(url, params=params)
+        response.raise_for_status()
+
+        return response.json()
+
+    async def get_last_price(self,
+                             ticker: str,
+                             exchange: str,
+                             fmt: str = "json"):
+        endpoint = "real-time"
+        params = {
+            "fmt": fmt,
+            "api_token": self.api_key,
+        }
+        url = f"{self.base_url}/{endpoint}/{ticker}.{exchange}"
+        response = await self.client.get(url, params=params)
+        response.raise_for_status()
+
+        return response.json()
+
     async def get_latest_candle_in_db(
         self, prefix: str, ticker: str, exchange: str, interval: str
     ):
@@ -44,21 +80,3 @@ class EODData:
         field = "date" if interval in ["d", "w", "m"] else "timestamp"
         query = f"SELECT MAX({field}) FROM {table_name}"
         return self.con.sql(query).fetchone()[0]
-
-    async def get_candle_plus_one_period(
-        self, prefix: str, ticker: str, exchange: str, interval: str
-    ):
-        latest_candle = await self.get_latest_candle_in_db(
-            prefix, ticker, exchange, interval
-        )
-
-        if interval in ["5m", "1h"]:
-            interval_seconds = {"5m": 300, "1h": 3600}
-            return latest_candle + interval_seconds[interval]
-        else:
-            interval_deltas = {
-                "d": relativedelta(days=1),
-                "w": relativedelta(weeks=1),
-                "m": relativedelta(months=1),
-            }
-            return latest_candle + interval_deltas.get(interval, relativedelta())

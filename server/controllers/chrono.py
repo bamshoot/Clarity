@@ -120,6 +120,11 @@ class EODDataCollectionChrono(Chrono):
             instrument, "FOREX", period
         )
 
+    async def _get_candles_with_from(self, instrument: str, period: str, db_from: str):
+        return await self.data_service.get_candles_with_from(
+            instrument, "FOREX", period, db_from
+        )
+
     async def _eod_candle_schema(self, data, instrument: str, period: str):
         if isinstance(data, list) and data:
             candles = [EODCandle(**candle_data) for candle_data in data]
@@ -129,12 +134,8 @@ class EODDataCollectionChrono(Chrono):
             return candles
         return []
 
-    async def _get_candle_plus_one_period(self, instrument: str, period: str):
-        return await self.data_service.get_candle_plus_one_period(
-            self.prefix, instrument, "FOREX", period
-        )
-
-    async def _full_candle_insert(self, data, instrument: str, period: str):
+    async def _full_candle_insert(self, instrument: str, period: str):
+        data = await self._get_candles(instrument, period)
         candles = await self._eod_candle_schema(data, instrument, period)
         df = pd.DataFrame([candle.__dict__ for candle in candles])
         df = df.rename(columns={"datetime_": "datetime", "date_": "date"})
@@ -156,39 +157,45 @@ class EODDataCollectionChrono(Chrono):
 
             con.unregister("df_temp")
 
-    async def _partial_candle_insert(self, data, instrument: str, period: str):
+    async def _partial_candle_insert(self, instrument: str, period: str):
+        db_from = await self.data_service.get_latest_candle_in_db(
+            self.prefix, instrument, "FOREX", period
+        )
+
+        data = await self._get_candles_with_from(instrument, period, db_from)
+
         candles = await self._eod_candle_schema(data, instrument, period)
         df = pd.DataFrame([candle.__dict__ for candle in candles])
         df = df.rename(columns={"datetime_": "datetime", "date_": "date"})
 
-        with self.db.get_connection() as con:
-            con.register("df_temp", df)
+        if period in ["5m", "1h"]:
+            df = df[df["timestamp"] > db_from]
+        else:
+            df = df[df["date"] > db_from]
 
-            # First count new rows
-            new_rows = con.execute(f"""
-                SELECT COUNT(*)
-                FROM df_temp
-                WHERE timestamp NOT IN (
-                    SELECT timestamp
-                    FROM {self.prefix}_{instrument}_{period}
+        new_rows = len(df)
+
+        if new_rows > 0:
+            with self.db.get_connection() as con:
+                con.register("df_temp", df)
+                con.execute(f"""
+                    INSERT INTO {self.prefix}_{instrument}_{period}
+                    SELECT *
+                    FROM df_temp
+                    WHERE timestamp NOT IN (
+                        SELECT timestamp
+                        FROM {self.prefix}_{instrument}_{period}
+                    )
+                """)
+
+                con.unregister("df_temp")
+
+                self.logger.logger.info(
+                    f"Rows added to {self.prefix}_{instrument}_{period}: {new_rows}"
                 )
-            """).fetchone()[0]
-
-            # Then insert new rows
-            con.execute(f"""
-                INSERT INTO {self.prefix}_{instrument}_{period}
-                SELECT *
-                FROM df_temp
-                WHERE timestamp NOT IN (
-                    SELECT timestamp
-                    FROM {self.prefix}_{instrument}_{period}
-                )
-            """)
-
-            con.unregister("df_temp")
-
+        else:
             self.logger.logger.info(
-                f"Rows added to {self.prefix}_{instrument}_{period}: {new_rows}"
+                f"No new rows to add to {self.prefix}_{instrument}_{period}"
             )
 
     async def _execute_task(self):
@@ -201,12 +208,10 @@ class EODDataCollectionChrono(Chrono):
 
                 if not table_exists:
                     self.logger.logger.info(f"Creating new table: {table_name}")
-                    data = await self._get_candles(instrument, period)
-                    await self._full_candle_insert(data, instrument, period)
+                    await self._full_candle_insert(instrument, period)
 
                 else:
-                    data = await self._get_candles(instrument, period)
-                    await self._partial_candle_insert(data, instrument, period)
+                    await self._partial_candle_insert(instrument, period)
 
             except Exception as e:
                 self.logger.logger.error(f"Error processing {table_name}: {str(e)}")
