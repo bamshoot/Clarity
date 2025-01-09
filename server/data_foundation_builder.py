@@ -929,7 +929,8 @@ class RSIRankBuilder:
         self.instrument_name = None
         self.timeframe = None
         self.source_table_name = None
-        self.table_name = (f"tbl_{self.data_source}_RSIRank")
+        self.pair_table_name = (f"tbl_{self.data_source}_pair_RSI_Rank")
+        self.currency_table_name = (f"tbl_{self.data_source}_currency_RSI_Rank")
         self.currency_rsi_values = {
             'AUD': {'1h': [], 'd': [], 'w': [], 'm': []},
             'NZD': {'1h': [], 'd': [], 'w': [], 'm': []},
@@ -959,8 +960,10 @@ class RSIRankBuilder:
         return self.con.sql(f"SELECT * FROM {table_name}")
 
     def reset_rsi_ranks_table(self):
-        self._drop_table(self.table_name)
-        self._create_rsi_ranks_table()
+        self._drop_table(self.pair_table_name)
+        self._drop_table(self.currency_table_name)
+        self._create_pair_rsi_ranks_table()
+        self._create_currency_rsi_ranks_table()
 
     def _drop_table(self, table_name: str):
         self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
@@ -976,9 +979,9 @@ class RSIRankBuilder:
                                   f"{self.instrument_name}_"
                                   f"{self.timeframe}")
 
-    def _create_rsi_ranks_table(self):
+    def _create_pair_rsi_ranks_table(self):
         self.con.sql(f"""
-            CREATE TABLE {self.table_name}
+            CREATE TABLE {self.pair_table_name}
             (
                 instrument_name VARCHAR,
                 base_currency VARCHAR,
@@ -986,9 +989,22 @@ class RSIRankBuilder:
                 timeframe VARCHAR,
                 lst_price_datetime DATETIME,
                 pair_rsi DOUBLE,
-                currency_rsi DOUBLE,
+                base_rsi DOUBLE,
+                quote_rsi DOUBLE,
                 pair_timeframe_rank INTEGER,
-                currency_timeframe_rank INTEGER
+                base_timeframe_rank INTEGER,
+                quote_timeframe_rank INTEGER
+            )
+        """)
+
+    def _create_currency_rsi_ranks_table(self):
+        self.con.sql(f"""
+            CREATE TABLE {self.currency_table_name}
+            (
+                currency VARCHAR,
+                timeframe VARCHAR,
+                rsi DOUBLE,
+                rank INTEGER
             )
         """)
 
@@ -1009,7 +1025,7 @@ class RSIRankBuilder:
                 self.currency_rsi_values[quote_currency][self.timeframe].append(rsi[-1])
 
         self.con.sql(f"""
-            INSERT INTO {self.table_name}
+            INSERT INTO {self.pair_table_name}
             (instrument_name, base_currency, quote_currency, timeframe,
              lst_price_datetime, pair_rsi)
             VALUES
@@ -1019,7 +1035,7 @@ class RSIRankBuilder:
 
     def generate_pair_timeframe_rank(self):
         self.con.sql(f"""
-            UPDATE {self.table_name} t1
+            UPDATE {self.pair_table_name} t1
             SET pair_timeframe_rank = (
                 SELECT rank
                 FROM (
@@ -1030,7 +1046,7 @@ class RSIRankBuilder:
                             PARTITION BY timeframe
                             ORDER BY pair_rsi DESC
                         ) as rank
-                    FROM {self.table_name}
+                    FROM {self.pair_table_name}
                 ) rankings
                 WHERE rankings.instrument_name = t1.instrument_name
                 AND rankings.timeframe = t1.timeframe
@@ -1038,7 +1054,6 @@ class RSIRankBuilder:
         """)
 
     def generate_currency_rsi(self):
-
         for currency in self.currency_rsi_values:
             for timeframe in self.currency_rsi_values[currency]:
                 try:
@@ -1046,23 +1061,74 @@ class RSIRankBuilder:
                         sum(self.currency_rsi_values[currency][timeframe]) /
                         len(self.currency_rsi_values[currency][timeframe]))
                     self.con.sql(f"""
-                        UPDATE {self.table_name}
-                        SET currency_rsi = {self.currency_rsi_avg[currency][timeframe]}
-                        WHERE instrument_name LIKE '%{currency}%'
-                        AND timeframe = '{timeframe}'
+                        INSERT INTO {self.currency_table_name}
+                        (currency, timeframe, rsi)
+                        VALUES
+                        ('{currency}',
+                        '{timeframe}',
+                        {self.currency_rsi_avg[currency][timeframe]})
                     """)
                 except ZeroDivisionError:
                     self.currency_rsi_avg[currency][timeframe] = None
 
-    def get_rsi_table(self):
+        self.con.sql(f"""
+            UPDATE {self.currency_table_name} t1
+            SET rank = (
+                SELECT rank
+                FROM (
+                    SELECT currency,
+                           timeframe,
+                           DENSE_RANK() OVER (
+                               PARTITION BY timeframe ORDER BY rsi DESC) as rank
+                    FROM {self.currency_table_name}
+                ) rankings
+                WHERE rankings.currency = t1.currency
+                    AND rankings.timeframe = t1.timeframe
+            )
+        """)
+
+    def generate_base_quote_timeframe_rank(self):
+        self.con.sql(f"""
+            UPDATE {self.pair_table_name} t1
+            SET base_rsi = (
+                SELECT rsi
+                FROM {self.currency_table_name}
+                WHERE currency = t1.base_currency AND timeframe = t1.timeframe
+            )
+        """)
+        self.con.sql(f"""
+            UPDATE {self.pair_table_name} t1
+            SET quote_rsi = (
+                SELECT rsi
+                FROM {self.currency_table_name}
+                WHERE currency = t1.quote_currency AND timeframe = t1.timeframe
+            )
+        """)
+        self.con.sql(f"""
+            UPDATE {self.pair_table_name} t1
+            SET base_timeframe_rank = (
+                SELECT rank
+                FROM {self.currency_table_name}
+                WHERE currency = t1.base_currency AND timeframe = t1.timeframe
+            )
+        """)
+        self.con.sql(f"""
+            UPDATE {self.pair_table_name} t1
+            SET quote_timeframe_rank = (
+                SELECT rank
+                FROM {self.currency_table_name}
+                WHERE currency = t1.quote_currency AND timeframe = t1.timeframe
+            )
+        """)
+
+    def get_table(self, table_name: str):
         return self.con.sql(f"""
-            SELECT * FROM {self.table_name}
+            SELECT * FROM {table_name}
         """)
 
     def to_csv(self, table_name: str):
         self.con.sql(f"""
-            SELECT * FROM {table_name} ORDER BY instrument_name, timeframe
-        """).write_csv(f"./outputs/rsi/{table_name}.csv")
+            SELECT * FROM {table_name}""").write_csv(f"./outputs/rsi/{table_name}.csv")
 
 
 params = {
@@ -1197,9 +1263,11 @@ for instrument in params["instruments"]:
 
 rsi_rank_builder.generate_pair_timeframe_rank()
 rsi_rank_builder.generate_currency_rsi()
+rsi_rank_builder.generate_base_quote_timeframe_rank()
 
 if params["to_csv"]:
-    rsi_rank_builder.to_csv(rsi_rank_builder.table_name)
+    rsi_rank_builder.to_csv(rsi_rank_builder.pair_table_name)
+    rsi_rank_builder.to_csv(rsi_rank_builder.currency_table_name)
 
 end_time = time.time()
 print(f"Time taken: {end_time - start_time} seconds")
