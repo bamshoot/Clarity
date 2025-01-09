@@ -1131,6 +1131,96 @@ class RSIRankBuilder:
             SELECT * FROM {table_name}""").write_csv(f"./outputs/rsi/{table_name}.csv")
 
 
+class MACDPriceConvergenceDivergenceBuilder:
+    def __init__(self, db_path: str, data_source: str):
+        self.db_path = db_path
+        self.con = duckdb.connect(self.db_path)
+        self.data_source = data_source
+        self.instrument_name = None
+        self.timeframe = None
+        self.source_table_name = None
+        self.table_name = (f"tbl_{self.data_source}_"
+                           f"macd_price_convergence_divergence")
+        self.reset_macd_convergence_divergence_table()
+
+    def __del__(self):
+        if hasattr(self, 'con'):
+            self.con.close()
+
+    def _get_table_from_db(self, table_name: str):
+        return self.con.sql(f"SELECT * FROM {table_name}")
+
+    def reset_macd_convergence_divergence_table(self):
+        self._drop_table(self.table_name)
+        self._create_macd_convergence_divergence_table()
+
+    def _drop_table(self, table_name: str):
+        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
+
+    def _create_macd_convergence_divergence_table(self):
+        self.con.sql(f"""
+            CREATE TABLE {self.table_name}
+            (
+                instrument_name VARCHAR,
+                timeframe VARCHAR,
+                macd_price_cd DOUBLE,
+                status VARCHAR
+            )
+        """)
+
+    def set_instrument_name(self, instrument_name: str):
+        self.instrument_name = instrument_name
+
+    def set_timeframe(self, timeframe: str):
+        self.timeframe = timeframe
+
+    def set_source_table_name(self):
+        self.source_table_name = (f"tbl_{self.data_source}_"
+                                  f"{self.instrument_name}_"
+                                  f"{self.timeframe}")
+
+    def generate_macd_convergence_divergence(self):
+        data = self._get_table_from_db(self.source_table_name).fetchnumpy()
+
+        slope_length = 5
+
+        close = data["close"]
+        smoothed_close = ta.EMA(close, 20)
+        macd, macd_signal, macd_hist = ta.MACD(close, 12, 26, 9)
+
+        atr = ta.ATR(data["high"], data["low"], data["close"], 14)[-1]
+        slope_close = (ta.LINEARREG_SLOPE(smoothed_close, slope_length)[-1]/atr)*100
+        slope_macd = (ta.LINEARREG_SLOPE(macd, slope_length)[-1]/atr)*100
+
+        macd_price_cd = slope_close - slope_macd
+
+        if macd_price_cd > 5:
+            status = "bullish divergence"
+        elif macd_price_cd < -5:
+            status = "bearish divergence"
+        else:
+            status = "convergence"
+
+        self.con.sql(f"""
+            INSERT INTO {self.table_name}
+                (instrument_name, timeframe, macd_price_cd, status)
+            VALUES ('{self.instrument_name}',
+                    '{self.timeframe}',
+                     {macd_price_cd},
+                    '{status}')
+        """)
+
+    def get_table(self, table_name: str):
+        return self.con.sql(f"""
+            SELECT * FROM {table_name}
+        """)
+
+    def to_csv(self, table_name: str):
+        self.con.sql(f"""
+            SELECT * FROM {table_name}""").write_csv(
+                f"./outputs/macd_price_cd/{table_name}.csv")
+
+
 params = {
     "data_source": "EOD",
     "instruments": [
@@ -1248,26 +1338,40 @@ start_time = time.time()
 # # Replace the loop with:
 # asyncio.run(process_all_instruments())
 
-print("Building RSI ranks")
+# print("Building RSI ranks")
 
-rsi_rank_builder = RSIRankBuilder("./database/clarity.db", "EOD")
-rsi_rank_builder.reset_rsi_ranks_table()
+# rsi_rank_builder = RSIRankBuilder("./database/clarity.db", "EOD")
+# rsi_rank_builder.reset_rsi_ranks_table()
 
+# for instrument in params["instruments"]:
+#     for timeframe in params["timeframes"]:
+#         print(f"Building {instrument} {timeframe}")
+#         rsi_rank_builder.set_instrument_name(instrument)
+#         rsi_rank_builder.set_timeframe(timeframe)
+#         rsi_rank_builder.set_source_table_name()
+#         rsi_rank_builder.generate_rsi()
+
+# rsi_rank_builder.generate_pair_timeframe_rank()
+# rsi_rank_builder.generate_currency_rsi()
+# rsi_rank_builder.generate_base_quote_timeframe_rank()
+
+# if params["to_csv"]:
+#     rsi_rank_builder.to_csv(rsi_rank_builder.pair_table_name)
+#     rsi_rank_builder.to_csv(rsi_rank_builder.currency_table_name)
+
+print("Building MACD Price Convergence Divergence")
+
+macd_price_cd_builder = MACDPriceConvergenceDivergenceBuilder(
+    "./database/clarity.db", "EOD")
 for instrument in params["instruments"]:
     for timeframe in params["timeframes"]:
-        print(f"Building {instrument} {timeframe}")
-        rsi_rank_builder.set_instrument_name(instrument)
-        rsi_rank_builder.set_timeframe(timeframe)
-        rsi_rank_builder.set_source_table_name()
-        rsi_rank_builder.generate_rsi()
-
-rsi_rank_builder.generate_pair_timeframe_rank()
-rsi_rank_builder.generate_currency_rsi()
-rsi_rank_builder.generate_base_quote_timeframe_rank()
+        macd_price_cd_builder.set_instrument_name(instrument)
+        macd_price_cd_builder.set_timeframe(timeframe)
+        macd_price_cd_builder.set_source_table_name()
+        macd_price_cd_builder.generate_macd_convergence_divergence()
 
 if params["to_csv"]:
-    rsi_rank_builder.to_csv(rsi_rank_builder.pair_table_name)
-    rsi_rank_builder.to_csv(rsi_rank_builder.currency_table_name)
+    macd_price_cd_builder.to_csv(macd_price_cd_builder.table_name)
 
 end_time = time.time()
 print(f"Time taken: {end_time - start_time} seconds")
