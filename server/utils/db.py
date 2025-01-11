@@ -28,4 +28,6 @@ def drop_table(db_path, table_name):
 # drop_tables("./database/clarity.db")
 # drop_table("./database/clarity.db", "tbl_EOD_AUDCAD_d")
 
-get_table("./database/clarity.db", "tbl_EOD_AUDCAD_d")
+get_table("./database/clarity.db", "tbl_EOD_AUDCAD_1h")
+get_table("./database/clarity.db", "tbl_EOD_AUDCAD_5m")
+

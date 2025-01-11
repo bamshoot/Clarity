@@ -3,5 +3,10 @@ venv/
 data/
 clarity.db
 clarity copy.db
+clarity_copy.db
+clarity.db.wal
 logs/
 outputs/
+server/database/clarity_copy.db
+server/database/clarity.db
+server/database/clarity.db.wal

@@ -34,6 +34,5 @@ class EODCandle(BaseModel):
         if self.date_ is None and self.datetime_ is not None:
             self.date_ = self.datetime_.date()
 
-        # Calculate timestamp from datetime_ if it's not provided
         if self.timestamp is None and self.datetime_ is not None:
             self.timestamp = int(self.datetime_.timestamp())

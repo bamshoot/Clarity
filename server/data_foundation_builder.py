@@ -1188,9 +1188,9 @@ class MACDPriceConvergenceDivergenceBuilder:
         smoothed_close = ta.EMA(close, 20)
         macd, macd_signal, macd_hist = ta.MACD(close, 12, 26, 9)
 
-        atr = ta.ATR(data["high"], data["low"], data["close"], 14)[-1]
-        slope_close = (ta.LINEARREG_SLOPE(smoothed_close, slope_length)[-1]/atr)*100
-        slope_macd = (ta.LINEARREG_SLOPE(macd, slope_length)[-1]/atr)*100
+        atr = ta.ATR(data["high"], data["low"], data["close"], 14)
+        slope_close = (ta.LINEARREG_SLOPE(smoothed_close, slope_length)[-1]/atr[-1])*100
+        slope_macd = (ta.LINEARREG_SLOPE(macd, slope_length)[-1]/atr[-1])*100
 
         macd_price_cd = slope_close - slope_macd
 
@@ -1221,6 +1221,406 @@ class MACDPriceConvergenceDivergenceBuilder:
                 f"./outputs/macd_price_cd/{table_name}.csv")
 
 
+class PatternConvergenceDivergenceBuilder:
+
+    def __init__(self, db_path: str, data_source: str):
+        self.db_path = db_path
+        self.con = duckdb.connect(self.db_path)
+        self.data_source = data_source
+        self.instrument_name = None
+        self.timeframe = None
+        self.fractal_period = None
+        self.cluster_count = None
+        self.source_table_name = None
+        self.table_name = (f"tbl_{self.data_source}_"
+                           f"pattern_convergence_divergence")
+        self.reset_pattern_convergence_divergence_table()
+
+    def __del__(self):
+        if hasattr(self, 'con'):
+            self.con.close()
+
+    def _get_table_from_db(self, table_name: str):
+        return self.con.sql(f"SELECT * FROM {table_name}")
+
+    def _drop_table(self, table_name: str):
+        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
+
+    def reset_pattern_convergence_divergence_table(self):
+        self._drop_table(self.table_name)
+        self._create_pattern_convergence_divergence_table()
+
+    def set_instrument_name(self, instrument_name: str):
+        self.instrument_name = instrument_name
+
+    def set_timeframe(self, timeframe: str):
+        self.timeframe = timeframe
+
+    def set_fractal_period(self, fractal_period: int):
+        self.fractal_period = fractal_period
+
+    def set_cluster_count(self, cluster_count: int):
+        self.cluster_count = cluster_count
+
+    def set_source_table_name(self):
+        self.source_table_name = (f"tbl_{self.data_source}_"
+                                  f"{self.instrument_name}_"
+                                  f"{self.timeframe}_"
+                                  f"f{self.fractal_period}_"
+                                  f"k{self.cluster_count}")
+
+    def _create_pattern_convergence_divergence_table(self):
+        self.con.sql(f"""
+            CREATE TABLE {self.table_name}
+            (
+                instrument_name VARCHAR,
+                timeframe VARCHAR,
+                f INTEGER,
+                atr DOUBLE,
+                first_upper_x BIGINT,
+                first_upper_y DOUBLE,
+                second_upper_x BIGINT,
+                second_upper_y DOUBLE,
+                third_upper_x BIGINT,
+                third_upper_y DOUBLE,
+                first_lower_x BIGINT,
+                first_lower_y DOUBLE,
+                second_lower_x BIGINT,
+                second_lower_y DOUBLE,
+                third_lower_x BIGINT,
+                third_lower_y DOUBLE,
+                max_first_x BIGINT,
+                max_first_y DOUBLE,
+                min_third_x BIGINT,
+                min_third_y DOUBLE,
+                upper_slope DOUBLE,
+                upper_intercept DOUBLE,
+                lower_slope DOUBLE,
+                lower_intercept DOUBLE,
+                y_at_max_first_x DOUBLE,
+                y_at_min_third_x DOUBLE,
+                second_within_atr BOOLEAN,
+                third_ul_lt_first BOOLEAN,
+                status VARCHAR
+            )
+        """)
+
+    def generate_pattern_convergence_divergence(self):
+
+        data = self._get_table_from_db(self.source_table_name).fetchnumpy()
+        atr = ta.ATR(data["high"], data["low"], data["close"], 14)[-1]
+
+        last_timestamp = self.con.sql(f"""
+            SELECT timestamp
+            FROM {self.source_table_name}
+            ORDER BY TIMESTAMP DESC
+            LIMIT 1
+        """).fetchone()[0]
+
+        self.con.sql(f"""
+            CREATE TEMP TABLE temp_uf AS
+            SELECT timestamp, open, close, f, uf, lf, GREATEST(open, close) as max_price, 0 as min_price
+            FROM (
+                SELECT *
+                FROM {self.source_table_name}
+                WHERE uf = TRUE and timestamp < {last_timestamp}
+                ORDER BY TIMESTAMP DESC
+                LIMIT 3
+            ) sub
+            ORDER BY TIMESTAMP ASC
+        """)
+
+        self.con.sql(f"""
+            CREATE TEMP TABLE temp_lf AS
+            SELECT timestamp, open, close, f, uf, lf, 0 as max_price, LEAST(open, close) as min_price
+            FROM (
+                SELECT *
+                FROM {self.source_table_name}
+                WHERE lf = TRUE and timestamp < {last_timestamp}
+                ORDER BY TIMESTAMP DESC
+                LIMIT 3
+            ) sub
+            ORDER BY TIMESTAMP ASC
+        """)
+
+        self.con.sql("""
+            CREATE TEMP TABLE temp_uf_transposed AS
+            SELECT
+                timestamp[1] as first_upper_x,
+                max_price[1] as first_upper_y,
+                timestamp[2] as second_upper_x,
+                max_price[2] as second_upper_y,
+                timestamp[3] as third_upper_x,
+                max_price[3] as third_upper_y
+            FROM (
+                SELECT
+                    LIST(timestamp) as timestamp,
+                    LIST(max_price) as max_price
+                FROM temp_uf
+            )
+        """)
+
+        self.con.sql("""
+            CREATE TEMP TABLE temp_lf_transposed AS
+            SELECT
+                timestamp[1] as first_lower_x,
+                min_price[1] as first_lower_y,
+                timestamp[2] as second_lower_x,
+                min_price[2] as second_lower_y,
+                timestamp[3] as third_lower_x,
+                min_price[3] as third_lower_y
+            FROM (
+                SELECT
+                    LIST(timestamp) as timestamp,
+                    LIST(min_price) as min_price
+                FROM temp_lf
+            )
+        """)
+
+        # First INSERT statement
+        self.con.sql(f"""
+            INSERT INTO {self.table_name}
+            (instrument_name,
+            timeframe,
+            f,
+            atr,
+            first_upper_x,
+            first_upper_y,
+            second_upper_x,
+            second_upper_y,
+            third_upper_x,
+            third_upper_y)
+            SELECT
+                '{self.instrument_name}',
+                '{self.timeframe}',
+                {self.fractal_period},
+                {atr},
+                first_upper_x,
+                first_upper_y,
+                second_upper_x,
+                second_upper_y,
+                third_upper_x,
+                third_upper_y
+            FROM temp_uf_transposed
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.table_name}
+            SET
+                first_lower_x = temp.first_lower_x,
+                first_lower_y = temp.first_lower_y,
+                second_lower_x = temp.second_lower_x,
+                second_lower_y = temp.second_lower_y,
+                third_lower_x = temp.third_lower_x,
+                third_lower_y = temp.third_lower_y
+            FROM temp_lf_transposed temp
+            WHERE {self.table_name}.instrument_name = '{self.instrument_name}'
+            AND {self.table_name}.timeframe = '{self.timeframe}'
+            AND {self.table_name}.f = {self.fractal_period}
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.table_name}
+            SET max_first_x = GREATEST(first_upper_x, first_lower_x),
+                min_third_x = LEAST(third_upper_x, third_lower_x)
+            WHERE instrument_name = '{self.instrument_name}'
+            AND timeframe = '{self.timeframe}'
+            AND f = {self.fractal_period}
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.table_name}
+            SET
+                upper_slope = (third_upper_y - first_upper_y) /
+                    (third_upper_x - first_upper_x),
+                upper_intercept = first_upper_y - (first_upper_x *
+                    (third_upper_y - first_upper_y) /
+                    (third_upper_x - first_upper_x))
+            WHERE instrument_name = '{self.instrument_name}'
+            AND timeframe = '{self.timeframe}'
+            AND f = {self.fractal_period}
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.table_name}
+            SET
+                lower_slope = (third_lower_y - first_lower_y) /
+                    (third_lower_x - first_lower_x),
+                lower_intercept = first_lower_y - (first_lower_x *
+                    (third_lower_y - first_lower_y) /
+                    (third_lower_x - first_lower_x))
+            WHERE instrument_name = '{self.instrument_name}'
+            AND timeframe = '{self.timeframe}'
+            AND f = {self.fractal_period}
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.table_name}
+            SET
+                y_at_max_first_x = upper_slope * max_first_x + upper_intercept,
+                y_at_min_third_x = lower_slope * min_third_x + lower_intercept
+            WHERE instrument_name = '{self.instrument_name}'
+            AND timeframe = '{self.timeframe}'
+            AND f = {self.fractal_period}
+        """)
+
+        # union temp_uf and temp_lf
+        self.con.sql(f"""
+            CREATE TEMP TABLE temp_union AS
+            SELECT * FROM temp_uf
+            UNION ALL
+            SELECT * FROM temp_lf
+        """)
+
+        union = self.con.sql(f"""
+            SELECT * FROM temp_union
+
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.table_name}
+            SET
+               max_first_y = GREATEST(max_price, min_price),
+            FROM temp_union
+            WHERE timestamp = max_first_x
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.table_name}
+            SET
+               min_third_y = GREATEST(max_price, min_price),
+            FROM temp_union
+            WHERE timestamp = min_third_x
+        """)
+
+        print(union)
+
+        self.con.sql("""
+            DROP TABLE IF EXISTS temp_uf
+        """)
+        self.con.sql("""
+            DROP TABLE IF EXISTS temp_lf
+        """)
+        self.con.sql("""
+            DROP TABLE IF EXISTS temp_uf_transposed
+        """)
+        self.con.sql("""
+            DROP TABLE IF EXISTS temp_lf_transposed
+        """)
+
+        output = self.con.sql(f"""
+            SELECT * FROM {self.table_name}
+        """)
+
+        print(output)
+
+    def to_csv(self, table_name: str):
+        self.con.sql(f"""
+            SELECT * FROM {table_name}""").write_csv(
+                f"./outputs/pattern_cd/{table_name}.csv")
+
+
+class CandlePatternBuilder:
+    def __init__(self, db_path: str, data_source: str, candle_patterns: dict):
+        self.db_path = db_path
+        self.con = duckdb.connect(self.db_path)
+        self.data_source = data_source
+        self.instrument_name = None
+        self.timeframe = None
+        self.source_table_name = None
+        self.table_name = None
+        self.candle_patterns = candle_patterns
+
+    def __del__(self):
+        if hasattr(self, 'con'):
+            self.con.close()
+
+    def get_table_from_db(self, table_name: str):
+        return self.con.sql(f"SELECT * FROM {table_name}")
+
+    def reset_candle_pattern_table(self):
+        self._drop_table(self.table_name)
+        self._create_candle_pattern_table()
+
+    def _drop_table(self, table_name: str):
+        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
+
+    def _create_candle_pattern_table(self):
+        self.con.sql(f"""
+            CREATE TABLE {self.table_name} AS
+            SELECT * FROM {self.source_table_name}
+        """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.table_name}
+            ADD COLUMN instrument_name VARCHAR
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.table_name}
+            ADD COLUMN timeframe VARCHAR
+        """)
+
+        for pattern in self.candle_patterns:
+            self.con.sql(f"""
+                ALTER TABLE {self.table_name}
+                ADD COLUMN {pattern} INTEGER
+            """)
+
+    def set_instrument_name(self, instrument_name: str):
+        self.instrument_name = instrument_name
+
+    def set_timeframe(self, timeframe: str):
+        self.timeframe = timeframe
+
+    def set_table_name(self):
+        self.table_name = (f"tbl_{self.data_source}_{self.instrument_name}_"
+                           f"{self.timeframe}_"
+                           f"candle_patterns")
+
+    def set_source_table_name(self):
+        self.source_table_name = (f"tbl_{self.data_source}_"
+                                  f"{self.instrument_name}_"
+                                  f"{self.timeframe}")
+
+    def generate_candle_patterns(self):
+        data = self.get_table_from_db(self.table_name).fetchnumpy()
+
+        for pattern_name, (_, func) in self.candle_patterns.items():
+            print(f"Generating {pattern_name} "
+                  f"for {self.instrument_name} "
+                  f"{self.timeframe}")
+            pattern_result = func(data['open'],
+                                  data['high'],
+                                  data['low'],
+                                  data['close'])
+
+            # Create a temporary table with the pattern values
+            self.con.execute(f"""
+                CREATE TEMP TABLE temp_patterns AS
+                SELECT datetime,
+                       UNNEST(?) as pattern_value
+                FROM {self.table_name}
+            """, [pattern_result.tolist()])
+
+            # Update the main table using the temporary table
+            self.con.execute(f"""
+                UPDATE {self.table_name} t
+                SET {pattern_name} = tp.pattern_value,
+                    instrument_name = '{self.instrument_name}',
+                    timeframe = '{self.timeframe}'
+                FROM temp_patterns tp
+                WHERE t.datetime = tp.datetime
+            """)
+
+            # Clean up temporary table
+            self.con.execute("DROP TABLE IF EXISTS temp_patterns")
+
+    def to_csv(self, table_name: str):
+        self.con.sql(f"""
+            SELECT * FROM {table_name}""").write_csv(
+                f"./outputs/candle_patterns/{table_name}.csv")
+
+
 params = {
     "data_source": "EOD",
     "instruments": [
@@ -1231,12 +1631,254 @@ params = {
     "timeframes": ["1h", "d", "w", "m"],
     "max_bars": 730,
     "candle_price_point": "close",
-    "fractal_period": 2,
+    "fractal_period": {"1h": [2, 4], "d": [2], "w": [2], "m": [2]},
     "cluster_count": 10,
     "outlier_threshold": 0.02,
     "to_csv": True
 }
 
+candlestick_patterns = {
+    "CDL2CROWS": {"name": "Two Crows",
+                  "type": "reversal",
+                  "direction": "bear",
+                  "func": ta.CDL2CROWS},
+    "CDL3BLACKCROWS": {"name": "Three Black Crows",
+                       "type": "reversal",
+                       "direction": "bear",
+                       "func": ta.CDL3BLACKCROWS},
+    "CDL3INSIDE": {"name": "Three Inside Up/Down",
+                   "type": "reversal",
+                   "direction": "bull/bear",
+                   "func": ta.CDL3INSIDE},
+    "CDL3LINESTRIKE": {"name": "Three-Line Strike",
+                       "type": "reversal",
+                       "direction": "bull/bear",
+                       "func": ta.CDL3LINESTRIKE},
+    "CDL3OUTSIDE": {"name": "Three Outside Up/Down",
+                    "type": "reversal",
+                    "direction": "bull/bear",
+                    "func": ta.CDL3OUTSIDE},
+    "CDL3STARSINSOUTH": {"name": "Three Stars In The South",
+                         "type": "reversal",
+                         "direction": "bull",
+                         "func": ta.CDL3STARSINSOUTH},
+    "CDL3WHITESOLDIERS": {"name": "Three Advancing White Soldiers",
+                          "type": "continuation",
+                          "direction": "bull",
+                          "func": ta.CDL3WHITESOLDIERS},
+    "CDLABANDONEDBABY": {"name": "Abandoned Baby",
+                         "type": "reversal",
+                         "direction": "bull/bear",
+                         "func": ta.CDLABANDONEDBABY},
+    "CDLADVANCEBLOCK": {"name": "Advance Block",
+                        "type": "continuation",
+                        "direction": "bear",
+                        "func": ta.CDLADVANCEBLOCK},
+    "CDLBELTHOLD": {"name": "Belt-hold",
+                    "type": "reversal",
+                    "direction": "bull/bear",
+                    "func": ta.CDLBELTHOLD},
+    "CDLBREAKAWAY": {"name": "Breakaway",
+                     "type": "reversal",
+                     "direction": "bull/bear",
+                     "func": ta.CDLBREAKAWAY},
+    "CDLCLOSINGMARUBOZU": {"name": "Closing Marubozu",
+                           "type": "continuation",
+                           "direction": "bull/bear",
+                           "func": ta.CDLCLOSINGMARUBOZU},
+    "CDLCONCEALBABYSWALL": {"name": "Concealing Baby Swallow",
+                            "type": "continuation",
+                            "direction": "bear",
+                            "func": ta.CDLCONCEALBABYSWALL},
+    "CDLCOUNTERATTACK": {"name": "Counterattack",
+                         "type": "reversal",
+                         "direction": "bull/bear",
+                         "func": ta.CDLCOUNTERATTACK},
+    "CDLDARKCLOUDCOVER": {"name": "Dark Cloud Cover",
+                          "type": "reversal",
+                          "direction": "bear",
+                          "func": ta.CDLDARKCLOUDCOVER},
+    "CDLDOJI": {"name": "Doji",
+                "type": "indecisive",
+                "direction": "neutral",
+                "func": ta.CDLDOJI},
+    "CDLDOJISTAR": {"name": "Doji Star",
+                    "type": "indecisive",
+                    "direction": "neutral",
+                    "func": ta.CDLDOJISTAR},
+    "CDLDRAGONFLYDOJI": {"name": "Dragonfly Doji",
+                         "type": "indecisive",
+                         "direction": "neutral",
+                         "func": ta.CDLDRAGONFLYDOJI},
+    "CDLENGULFING": {"name": "Engulfing Pattern",
+                     "type": "reversal",
+                     "direction": "bull/bear",
+                     "func": ta.CDLENGULFING},
+    "CDLEVENINGDOJISTAR": {"name": "Evening Doji Star",
+                           "type": "reversal",
+                           "direction": "bear",
+                           "func": ta.CDLEVENINGDOJISTAR},
+    "CDLEVENINGSTAR": {"name": "Evening Star",
+                       "type": "reversal",
+                       "direction": "bear",
+                       "func": ta.CDLEVENINGSTAR},
+    "CDLGAPSIDESIDEWHITE": {"name": "Up/Down-gap side-by-side white lines",
+                            "type": "continuation",
+                            "direction": "bull/bear",
+                            "func": ta.CDLGAPSIDESIDEWHITE},
+    "CDLGRAVESTONEDOJI": {"name": "Gravestone Doji",
+                          "type": "indecisive",
+                          "direction": "neutral",
+                          "func": ta.CDLGRAVESTONEDOJI},
+    "CDLHAMMER": {"name": "Hammer",
+                  "type": "reversal",
+                  "direction": "bull",
+                  "func": ta.CDLHAMMER},
+    "CDLHANGINGMAN": {"name": "Hanging Man",
+                      "type": "reversal",
+                      "direction": "bear",
+                      "func": ta.CDLHANGINGMAN},
+    "CDLHARAMI": {"name": "Harami Pattern",
+                  "type": "reversal",
+                  "direction": "bull/bear",
+                  "func": ta.CDLHARAMI},
+    "CDLHARAMICROSS": {"name": "Harami Cross Pattern",
+                       "type": "reversal",
+                       "direction": "bull/bear",
+                       "func": ta.CDLHARAMICROSS},
+    "CDLHIGHWAVE": {"name": "High-Wave Candle",
+                    "type": "indecisive",
+                    "direction": "neutral",
+                    "func": ta.CDLHIGHWAVE},
+    "CDLHIKKAKE": {"name": "Hikkake Pattern",
+                   "type": "continuation",
+                   "direction": "bear",
+                   "func": ta.CDLHIKKAKE},
+    "CDLHIKKAKEMOD": {"name": "Modified Hikkake Pattern",
+                      "type": "continuation",
+                      "direction": "bear",
+                      "func": ta.CDLHIKKAKEMOD},
+    "CDLHOMINGPIGEON": {"name": "Homing Pigeon",
+                        "type": "reversal",
+                        "direction": "bull",
+                        "func": ta.CDLHOMINGPIGEON},
+    "CDLIDENTICAL3CROWS": {"name": "Identical Three Crows",
+                           "type": "reversal",
+                           "direction": "bear",
+                           "func": ta.CDLIDENTICAL3CROWS},
+    "CDLINNECK": {"name": "In-Neck Pattern",
+                  "type": "continuation",
+                  "direction": "bear",
+                  "func": ta.CDLINNECK},
+    "CDLINVERTEDHAMMER": {"name": "Inverted Hammer",
+                          "type": "reversal",
+                          "direction": "bull",
+                          "func": ta.CDLINVERTEDHAMMER},
+    "CDLKICKING": {"name": "Kicking",
+                   "type": "continuation",
+                   "direction": "bull/bear",
+                   "func": ta.CDLKICKING},
+    "CDLKICKINGBYLENGTH": {"name": "Kicking by Length",
+                           "type": "continuation",
+                           "direction": "bull/bear",
+                           "func": ta.CDLKICKINGBYLENGTH},
+    "CDLLADDERBOTTOM": {"name": "Ladder Bottom",
+                        "type": "reversal",
+                        "direction": "bull",
+                        "func": ta.CDLLADDERBOTTOM},
+    "CDLLONGLEGGEDDOJI": {"name": "Long Legged Doji",
+                          "type": "indecisive",
+                          "direction": "neutral",
+                          "func": ta.CDLLONGLEGGEDDOJI},
+    "CDLLONGLINE": {"name": "Long Line Candle",
+                    "type": "continuation",
+                    "direction": "bull/bear",
+                    "func": ta.CDLLONGLINE},
+    "CDLMARUBOZU": {"name": "Marubozu",
+                    "type": "continuation",
+                    "direction": "bull/bear",
+                    "func": ta.CDLMARUBOZU},
+    "CDLMATCHINGLOW": {"name": "Matching Low",
+                       "type": "reversal",
+                       "direction": "bull",
+                       "func": ta.CDLMATCHINGLOW},
+    "CDLMATHOLD": {"name": "Mat Hold",
+                   "type": "continuation",
+                   "direction": "bull",
+                   "func": ta.CDLMATHOLD},
+    "CDLMORNINGDOJISTAR": {"name": "Morning Doji Star",
+                           "type": "reversal",
+                           "direction": "bull",
+                           "func": ta.CDLMORNINGDOJISTAR},
+    "CDLMORNINGSTAR": {"name": "Morning Star",
+                       "type": "reversal",
+                       "direction": "bull",
+                       "func": ta.CDLMORNINGSTAR},
+    "CDLONNECK": {"name": "On-Neck Pattern",
+                  "type": "continuation",
+                  "direction": "bear",
+                  "func": ta.CDLONNECK},
+    "CDLPIERCING": {"name": "Piercing Pattern",
+                    "type": "continuation",
+                    "direction": "bull",
+                    "func": ta.CDLPIERCING},
+    "CDLRICKSHAWMAN": {"name": "Rickshaw Man",
+                       "type": "indecisive",
+                       "direction": "neutral",
+                       "func": ta.CDLRICKSHAWMAN},
+    "CDLRISEFALL3METHODS": {"name": "Rising/Falling Three Methods",
+                            "type": "continuation",
+                            "direction": "bull/bear",
+                            "func": ta.CDLRISEFALL3METHODS},
+    "CDLSEPARATINGLINES": {"name": "Separating Lines",
+                           "type": "continuation",
+                           "direction": "bull/bear",
+                           "func": ta.CDLSEPARATINGLINES},
+    "CDLSHOOTINGSTAR": {"name": "Shooting Star",
+                        "type": "reversal",
+                        "direction": "bear",
+                        "func": ta.CDLSHOOTINGSTAR},
+    "CDLSHORTLINE": {"name": "Short Line Candle",
+                     "type": "indecisive",
+                     "direction": "neutral",
+                     "func": ta.CDLSHORTLINE},
+    "CDLSPINNINGTOP": {"name": "Spinning Top",
+                       "type": "indecisive",
+                       "direction": "neutral",
+                       "func": ta.CDLSPINNINGTOP},
+    "CDLSTICKSANDWICH": {"name": "Stick Sandwich",
+                         "type": "reversal",
+                         "direction": "bull",
+                         "func": ta.CDLSTICKSANDWICH},
+    "CDLTAKURI": {"name": "Takuri",
+                  "type": "reversal",
+                  "direction": "bull",
+                  "func": ta.CDLTAKURI},
+    "CDLTASUKIGAP": {"name": "Tasuki Gap",
+                     "type": "continuation",
+                     "direction": "bull/bear",
+                     "func": ta.CDLTASUKIGAP},
+    "CDLTHRUSTING": {"name": "Thrusting Pattern",
+                     "type": "continuation",
+                     "direction": "bear",
+                     "func": ta.CDLTHRUSTING},
+    "CDLTRISTAR": {"name": "Tristar Pattern",
+                   "type": "indecisive",
+                   "direction": "neutral",
+                   "func": ta.CDLTRISTAR},
+    "CDLUNIQUE3RIVER": {"name": "Unique 3 River",
+                        "type": "reversal",
+                        "direction": "bull",
+                        "func": ta.CDLUNIQUE3RIVER},
+    "CDLUPSIDEGAP2CROWS": {"name": "Upside Gap Two Crows",
+                           "type": "reversal",
+                           "direction": "bear",
+                           "func": ta.CDLUPSIDEGAP2CROWS},
+    "CDLXSIDEGAP3METHODS": {"name": "Upside/Downside Gap Three Methods",
+                            "type": "continuation",
+                            "direction": "bull/bear",
+                            "func": ta.CDLXSIDEGAP3METHODS}
+}
 
 start_time = time.time()
 
@@ -1246,26 +1888,27 @@ start_time = time.time()
 
 #     for timeframe in params["timeframes"]:
 
-#         fractal_table_name = (f"tbl_EOD_{instrument}_"
-#                               f"{timeframe}_"
-#                               f"f{params['fractal_period']}_"
-#                               f"k{params['cluster_count']}")
+#         for fractal_period in params["fractal_period"][timeframe]:
+#             fractal_table_name = (f"tbl_EOD_{instrument}_"
+#                                   f"{timeframe}_"
+#                                   f"f{fractal_period}_"
+#                                   f"k{params['cluster_count']}")
 
-#         print(f"Building {fractal_table_name}")
+#             print(f"Building {fractal_table_name}")
 
-#         data_foundation_builder = DataFoundationBuilder(
-#                     "./database/clarity.db",
-#                     "EOD",
-#                     instrument,
-#                     timeframe,
-#                     params["max_bars"],
-#                     params["fractal_period"],
-#                     params["cluster_count"],
-#                     params["outlier_threshold"],
-#                     params["candle_price_point"],
-#                     params["to_csv"])
+#             data_foundation_builder = DataFoundationBuilder(
+#                         "./database/clarity_copy.db",
+#                         "EOD",
+#                         instrument,
+#                         timeframe,
+#                         params["max_bars"],
+#                         fractal_period,
+#                         params["cluster_count"],
+#                         params["outlier_threshold"],
+#                         params["candle_price_point"],
+#                         params["to_csv"])
 
-#         data_foundation_builder.build_fractal_clusters(fractal_table_name)
+#             data_foundation_builder.build_fractal_clusters(fractal_table_name)
 
 # print("Appending data to support resistance table")
 
@@ -1359,19 +2002,51 @@ start_time = time.time()
 #     rsi_rank_builder.to_csv(rsi_rank_builder.pair_table_name)
 #     rsi_rank_builder.to_csv(rsi_rank_builder.currency_table_name)
 
-print("Building MACD Price Convergence Divergence")
+# print("Building MACD Price Convergence Divergence")
 
-macd_price_cd_builder = MACDPriceConvergenceDivergenceBuilder(
-    "./database/clarity.db", "EOD")
-for instrument in params["instruments"]:
-    for timeframe in params["timeframes"]:
-        macd_price_cd_builder.set_instrument_name(instrument)
-        macd_price_cd_builder.set_timeframe(timeframe)
-        macd_price_cd_builder.set_source_table_name()
-        macd_price_cd_builder.generate_macd_convergence_divergence()
+# macd_price_cd_builder = MACDPriceConvergenceDivergenceBuilder(
+#     "./database/clarity.db", "EOD")
+# for instrument in params["instruments"]:
+#     for timeframe in params["timeframes"]:
+#         macd_price_cd_builder.set_instrument_name(instrument)
+#         macd_price_cd_builder.set_timeframe(timeframe)
+#         macd_price_cd_builder.set_source_table_name()
+#         macd_price_cd_builder.generate_macd_convergence_divergence()
 
-if params["to_csv"]:
-    macd_price_cd_builder.to_csv(macd_price_cd_builder.table_name)
+# if params["to_csv"]:
+#     macd_price_cd_builder.to_csv(macd_price_cd_builder.table_name)
 
+
+# print("Building candle patterns")
+# candle_pattern_builder = CandlePatternBuilder(
+#     "./database/clarity.db", "EOD", candle_patterns)
+
+# for instrument in params["instruments"]:
+#     for timeframe in params["timeframes"]:
+#         print(f"Building {instrument} {timeframe} candle patterns")
+#         candle_pattern_builder.set_instrument_name(instrument)
+#         candle_pattern_builder.set_timeframe(timeframe)
+#         candle_pattern_builder.set_table_name()
+#         candle_pattern_builder.set_source_table_name()
+#         candle_pattern_builder.reset_candle_pattern_table()
+#         candle_pattern_builder.generate_candle_patterns()
+#         if params["to_csv"]:
+#             print(f"Writing {instrument} {timeframe} candle patterns to CSV")
+#             candle_pattern_builder.to_csv(candle_pattern_builder.table_name)
+
+
+pattern_convergence_divergence_builder = PatternConvergenceDivergenceBuilder(
+    "./database/clarity_copy.db", "EOD")
+
+pattern_convergence_divergence_builder.set_instrument_name("AUDJPY")
+pattern_convergence_divergence_builder.set_timeframe("1h")
+pattern_convergence_divergence_builder.set_fractal_period(4)
+pattern_convergence_divergence_builder.set_cluster_count(10)
+pattern_convergence_divergence_builder.set_source_table_name()
+
+pattern_convergence_divergence_builder.generate_pattern_convergence_divergence()
+
+pattern_convergence_divergence_builder.to_csv(
+    pattern_convergence_divergence_builder.table_name)
 end_time = time.time()
 print(f"Time taken: {end_time - start_time} seconds")
