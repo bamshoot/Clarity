@@ -26,8 +26,7 @@ def drop_table(db_path, table_name):
 
 # pprint.pprint(list_tables("./database/clarity.db"))
 # drop_tables("./database/clarity.db")
-# drop_table("./database/clarity.db", "tbl_EOD_AUDCAD_d")
+drop_table("./database/clarity.db", "tbl_EOD_EURUSD_1h_f2_k10_temp")
 
-get_table("./database/clarity.db", "tbl_EOD_AUDCAD_1h")
-get_table("./database/clarity.db", "tbl_EOD_AUDCAD_5m")
-
+# get_table("./database/clarity.db", "tbl_EOD_AUDCAD_1h")
+# get_table("./database/clarity.db", "tbl_EOD_AUDCAD_5m")

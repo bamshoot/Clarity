@@ -10,218 +10,248 @@ from config.config import Config
 
 
 class DataFoundationBuilder:
-    def __init__(self,
-                 db_path: str,
-                 data_source: str,
-                 instrument_name: str,
-                 timeframe: str,
-                 max_bars: int,
-                 fractal_period: int,
-                 cluster_count: int,
-                 outlier_threshold: float,
-                 candle_price_point: str,
-                 to_csv: bool = False):
+    def __init__(self, db_path: str):
         self.db_path = db_path
         self.con = duckdb.connect(self.db_path)
-        self.data_source = data_source
-        self.instrument_name = instrument_name
-        self.timeframe = timeframe
-        self.max_bars = max_bars
-        self.fractal_period = fractal_period
-        self.cluster_count = cluster_count
-        self.outlier_threshold = outlier_threshold
-        self.candle_price_point = candle_price_point
-        self.to_csv = to_csv
-        self.table_name = (f"tbl_{self.data_source}"
-                           f"_{self.instrument_name}"
-                           f"_{self.timeframe}")
-        self.fractal_table_name = (f"{self.table_name}_"
-                                   f"f{self.fractal_period}_"
-                                   f"k{self.cluster_count}")
-        self._reset_table(self.table_name, self.fractal_table_name)
-        self.threshold = self.con.sql(f"""
-            SELECT (MAX(close) - MIN(close)) * {self.outlier_threshold}
-            FROM {self.table_name}
-        """).fetchone()[0]
+        self.data_source = None
+        self.instrument_name = None
+        self.timeframe = None
+        self.source_table_name = None
+        self.working_table_name = None
+        self.output_folder = None
 
     def __del__(self):
         if hasattr(self, 'con'):
             self.con.close()
 
-    def _to_csv(self, table_name: str):
-        self.con.sql(f"""
-            SELECT * FROM {table_name} ORDER BY datetime
-        """).write_csv(f"./outputs/fractals/{table_name}.csv")
+    def get_table_from_db(self, table_name: str):
+        return self.con.sql(f"SELECT * FROM {table_name}")
 
-    def _get_table_from_db(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name} ORDER BY datetime")
-
-    def _drop_fractal_table(self, table_name: str):
+    def drop_table(self, table_name: str):
         self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
 
-    def _create_fractal_table(self, table_name: str, fractal_table_name: str):
+    def create_table(self, table_name: str):
+        pass
+
+    def reset_table(self, table_name: str):
+        self.drop_table(table_name)
+        self.create_table(table_name)
+
+    def set_data_source(self, data_source: str):
+        self.data_source = data_source
+
+    def set_instrument_name(self, instrument_name: str):
+        self.instrument_name = instrument_name
+
+    def set_timeframe(self, timeframe: str):
+        self.timeframe = timeframe
+
+    def set_source_table_name(self, source_table_name: str):
+        self.source_table_name = source_table_name
+
+    def set_working_table_name(self, working_table_name: str):
+        self.working_table_name = working_table_name
+
+    def set_output_folder(self, output_folder: str):
+        self.output_folder = output_folder
+
+    def to_csv(self, table_name: str):
+        self.con.sql(f"""
+            SELECT * FROM {table_name}
+        """).write_csv(f"outputs/{self.output_folder}/{table_name}.csv")
+
+
+class FractalClusterBuilder(DataFoundationBuilder):
+    def __init__(self,
+                 db_path: str,
+                 max_bars: int,
+                 cluster_count: int,
+                 outlier_threshold: float,
+                 candle_price_point: str):
+        super().__init__(db_path)
+        self.fractal_period = None
+        self.max_bars = max_bars
+        self.cluster_count = cluster_count
+        self.outlier_threshold = outlier_threshold
+        self.candle_price_point = candle_price_point
+        self.source_table_name = None
+        self.working_table_name = None
+        self.threshold = self.con.sql(f"""
+            SELECT (MAX(close) - MIN(close)) * {self.outlier_threshold}
+            FROM {self.source_table_name}
+        """).fetchone()[0]
+
+    def get_table_from_db(self, table_name: str):
+        return self.con.sql(f"SELECT * FROM {table_name} ORDER BY datetime")
+
+    def create_fractal_table(self):
         self.con.sql(
-            f"CREATE TABLE {fractal_table_name} AS SELECT * FROM {table_name}")
+            f"""
+                CREATE TABLE {self.working_table_name} AS
+                SELECT *
+                FROM {self.source_table_name}
+            """)
 
-    def _limit_bars(self, fractal_table_name: str, max_bars: int):
         self.con.sql(f"""
-            CREATE TABLE {fractal_table_name}_temp AS
-            SELECT * FROM {fractal_table_name}
+            CREATE TABLE {self.working_table_name}_temp AS
+            SELECT * FROM {self.working_table_name}
             ORDER BY datetime DESC
-            LIMIT {max_bars}
+            LIMIT {self.max_bars}
         """)
 
-        self._drop_fractal_table(fractal_table_name)
+        self.drop_table(self.working_table_name)
 
         self.con.sql(f"""
-            CREATE TABLE {fractal_table_name} AS
-            SELECT * FROM {fractal_table_name}_temp
+            CREATE TABLE {self.working_table_name} AS
+            SELECT * FROM {self.working_table_name}_temp
         """)
-        self._drop_fractal_table(f"{fractal_table_name}_temp")
+        self.drop_table(f"{self.working_table_name}_temp")
 
-    def _add_columns_to_fractal_table(self, fractal_table_name: str):
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN f INTEGER
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN k INTEGER
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN o DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN lstCandlePrice DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN distLstCandle DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN idx INTEGER
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN uf BOOLEAN
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN lf BOOLEAN
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN clust INTEGER
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN cent DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN centDist DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN centDistMean DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN centDistMeanInv DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN centDistLstCandle DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN centCount DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN centDistMeanRank DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN centCountRank DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN centDistLstCandleRank DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN score DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {fractal_table_name}
+            ALTER TABLE {self.working_table_name}
             ADD COLUMN overallRank DOUBLE
         """)
 
-    def _reset_table(self, table_name: str, fractal_table_name: str):
-        self._drop_fractal_table(fractal_table_name)
-        self._create_fractal_table(table_name, fractal_table_name)
-        self._limit_bars(fractal_table_name, self.max_bars)
-        self._add_columns_to_fractal_table(fractal_table_name)
+    def reset_table(self):
+        self.drop_table(self.working_table_name)
+        self.create_fractal_table()
 
-    def _generate_input_data(self, fractal_table_name: str):
+    def set_fractal_period(self, fractal_period: int):
+        self.fractal_period = fractal_period
+
+    def generate_input_data(self):
         self.con.sql(f"""
-            UPDATE {fractal_table_name}
+            UPDATE {self.working_table_name}
             SET f = {self.fractal_period}
         """)
         self.con.sql(f"""
-            UPDATE {fractal_table_name}
+            UPDATE {self.working_table_name}
             SET k = {self.cluster_count}
         """)
         self.con.sql(f"""
-            UPDATE {fractal_table_name}
+            UPDATE {self.working_table_name}
             SET o = {self.outlier_threshold}
         """)
 
-    def _generate_last_candle_price(self, fractal_table_name: str):
+    def generate_last_candle_price(self):
         if self.candle_price_point == "close":
             self.con.sql(f"""
-                UPDATE {fractal_table_name}
-                SET lstCandlePrice = (SELECT close FROM {fractal_table_name}
+                UPDATE {self.working_table_name}
+                SET lstCandlePrice = (SELECT close FROM {self.working_table_name}
                                          ORDER BY date DESC LIMIT 1),
-                    distLstCandle = abs((SELECT close FROM {fractal_table_name}
+                    distLstCandle = abs((SELECT close FROM {self.working_table_name}
                                             ORDER BY date DESC LIMIT 1) - close)
             """)
         elif self.candle_price_point == "high_low":
             self.con.sql(f"""
-                UPDATE {fractal_table_name}
-                SET lstCandlePrice = (SELECT (high + low) / 2 FROM {fractal_table_name}
-                                         ORDER BY date DESC LIMIT 1),
-                    distLstCandle = abs((SELECT (high + low) / 2 FROM
-                                            {fractal_table_name} ORDER BY date DESC
-                                            LIMIT 1) - (high + low) / 2)
+                UPDATE {self.working_table_name}
+                SET lstCandlePrice = (SELECT (high + low) / 2
+                                      FROM {self.working_table_name}
+                                      ORDER BY date DESC LIMIT 1),
+                    distLstCandle = abs((SELECT (high + low) / 2
+                                         FROM {self.working_table_name}
+                                         ORDER BY date DESC LIMIT 1) -
+                                         (high + low) / 2)
             """)
 
-    def _generate_index_data(self, fractal_table_name: str):
+    def generate_index_data(self):
 
         self.con.sql(f"""
-            CREATE TABLE {fractal_table_name}_temp AS
+            CREATE TABLE {self.working_table_name}_temp AS
             SELECT *,
                    row_number() OVER (ORDER BY date) - 1 AS idx_temp
-            FROM {fractal_table_name}
+            FROM {self.working_table_name}
         """)
 
         self.con.sql(f"""
-            UPDATE {fractal_table_name}
-            SET idx = {fractal_table_name}_temp.idx_temp,
-            FROM {fractal_table_name}_temp
-            WHERE {fractal_table_name}.date = {fractal_table_name}_temp.date
+            UPDATE {self.working_table_name}
+            SET idx = {self.working_table_name}_temp.idx_temp,
+            FROM {self.working_table_name}_temp
+            WHERE {self.working_table_name}.date = {self.working_table_name}_temp.date
         """)
 
-        self._drop_fractal_table(f"{fractal_table_name}_temp")
+        self.drop_table(f"{self.working_table_name}_temp")
 
-    def _generate_fractal_data(self, fractal_table_name: str):
+    def generate_fractal_data(self):
 
         self.con.sql(f"""
-            CREATE TABLE {fractal_table_name}_temp AS
+            CREATE TABLE {self.working_table_name}_temp AS
             WITH fractals AS (
                 SELECT
                     datetime,
@@ -266,73 +296,70 @@ class DataFoundationBuilder:
                                 'high_low' THEN low
                             ELSE close
                         END as current_low
-                    FROM {fractal_table_name}
+                    FROM {self.working_table_name}
                 ) AS subq
             )
             SELECT
                 t.*,
                 f.uf AS uf_temp,
                 f.lf AS lf_temp
-            FROM {fractal_table_name} t
+            FROM {self.working_table_name} t
             LEFT JOIN fractals f ON t.datetime = f.datetime
             ORDER BY t.datetime;
         """)
 
         self.con.sql(f"""
-            UPDATE {fractal_table_name} t
+            UPDATE {self.working_table_name} t
             SET uf = temp.uf_temp,
                 lf = temp.lf_temp
-            FROM {fractal_table_name}_temp temp
+            FROM {self.working_table_name}_temp temp
             WHERE t.datetime = temp.datetime
         """)
 
-        self._drop_fractal_table(f"{fractal_table_name}_temp")
+        self.drop_table(f"{self.working_table_name}_temp")
 
         self.con.sql(f"""
-            CREATE TABLE {fractal_table_name}_temp AS
-            SELECT * FROM {fractal_table_name}
+            CREATE TABLE {self.working_table_name}_temp AS
+            SELECT * FROM {self.working_table_name}
             WHERE uf = true OR lf = true
             ORDER BY idx
         """)
 
-        self._drop_fractal_table(f"{fractal_table_name}")
+        self.drop_table(f"{self.working_table_name}")
 
         self.con.sql(f"""
-            CREATE TABLE {fractal_table_name} AS
-            SELECT * FROM {fractal_table_name}_temp
+            CREATE TABLE {self.working_table_name} AS
+            SELECT * FROM {self.working_table_name}_temp
         """)
 
-        self._drop_fractal_table(f"{fractal_table_name}_temp")
+        self.drop_table(f"{self.working_table_name}_temp")
 
-    def _generate_cluster_data(self,
-                               table_name: str,
-                               candle_price_point: str,
-                               cluster_count: int = 5):
+    def generate_cluster_data(self):
 
-        df = self._get_table_from_db(table_name).to_df()
+        df = self.get_table_from_db(self.working_table_name).to_df()
 
-        clusters, centroids = kmeans1d.cluster(df[candle_price_point],
-                                               cluster_count)
+        clusters, centroids = kmeans1d.cluster(df[self.candle_price_point],
+                                               self.cluster_count)
 
         cent_clust = [centroids[clust] for clust in clusters]
 
         df['cent'] = cent_clust
         df['clust'] = clusters
 
-        self.con.execute(f"DROP TABLE IF EXISTS {table_name}")
+        self.con.execute(f"DROP TABLE IF EXISTS {self.working_table_name}")
         self.con.execute(f"""
-            CREATE TABLE {table_name} AS
+            CREATE TABLE {self.working_table_name} AS
             SELECT * FROM df
         """)
 
-    def _generate_cent_dist(self, fractal_table_name: str):
+    def generate_cent_dist(self):
         self.con.sql(f"""
-            UPDATE {fractal_table_name}
+            UPDATE {self.working_table_name}
             SET centDist = abs(cent - close)
         """)
 
         self.con.sql(f"""
-            UPDATE {fractal_table_name}
+            UPDATE {self.working_table_name}
             SET centDistMean = sub.cent_dist_mean,
                 centDistMeanInv = sub.cent_dist_mean_inv
             FROM (
@@ -340,56 +367,56 @@ class DataFoundationBuilder:
                     datetime,
                     AVG(centDist) OVER (PARTITION BY clust) as cent_dist_mean,
                     AVG(1 / centDist) OVER (PARTITION BY clust) as cent_dist_mean_inv
-                FROM {fractal_table_name}
+                FROM {self.working_table_name}
             ) sub
-            WHERE {fractal_table_name}.datetime = sub.datetime
+            WHERE {self.working_table_name}.datetime = sub.datetime
         """)
 
-    def _remove_outliers(self, fractal_table_name: str):
+    def remove_outliers(self):
 
         self.con.sql(f"""
-            CREATE TABLE {fractal_table_name}_temp AS
-            SELECT * FROM {fractal_table_name}
+            CREATE TABLE {self.working_table_name}_temp AS
+            SELECT * FROM {self.working_table_name}
             WHERE centDist <= {self.threshold}
         """)
 
-        self._drop_fractal_table(fractal_table_name)
+        self.drop_table(self.working_table_name)
 
         self.con.sql(f"""
-            CREATE TABLE {fractal_table_name} AS
-            SELECT * FROM {fractal_table_name}_temp
+            CREATE TABLE {self.working_table_name} AS
+            SELECT * FROM {self.working_table_name}_temp
         """)
 
-        self._drop_fractal_table(f"{fractal_table_name}_temp")
+        self.drop_table(f"{self.working_table_name}_temp")
 
-    def _generate_cent_dist_lst_candle(self, fractal_table_name: str):
+    def generate_cent_dist_lst_candle(self):
         self.con.sql(f"""
-            UPDATE {fractal_table_name}
+            UPDATE {self.working_table_name}
             SET centDistLstCandle = cent - lstCandlePrice
         """)
 
-    def _generate_cent_count(self, fractal_table_name: str):
+    def generate_cent_count(self):
         self.con.sql(f"""
-            UPDATE {fractal_table_name}
+            UPDATE {self.working_table_name}
             SET centCount = sub.cnt,
             FROM (
                 SELECT
                     datetime,
                     COUNT(*) OVER (PARTITION BY clust) as cnt,
-                FROM {fractal_table_name}
+                FROM {self.working_table_name}
             ) sub
-            WHERE {fractal_table_name}.datetime = sub.datetime
+            WHERE {self.working_table_name}.datetime = sub.datetime
         """)
 
-    def _generate_score(self, fractal_table_name: str):
+    def generate_score(self):
         self.con.sql(f"""
-            UPDATE {fractal_table_name}
+            UPDATE {self.working_table_name}
             SET score = (centCount * centDistMeanInv)
         """)
 
-    def _generate_rank(self, fractal_table_name: str):
+    def generate_rank(self):
         self.con.sql(f"""
-            UPDATE {fractal_table_name}
+            UPDATE {self.working_table_name}
             SET centDistMeanRank = sub.cent_dist_mean_rank,
                 centCountRank = sub.cent_count_rank
             FROM (
@@ -399,9 +426,9 @@ class DataFoundationBuilder:
                         ORDER BY centDistMean ASC) as cent_dist_mean_rank,
                     DENSE_RANK() OVER (
                         ORDER BY centCount DESC) as cent_count_rank,
-                FROM {fractal_table_name}
+                FROM {self.working_table_name}
             ) sub
-            WHERE {fractal_table_name}.datetime = sub.datetime
+            WHERE {self.working_table_name}.datetime = sub.datetime
         """)
 
         self.con.sql(f"""
@@ -410,7 +437,7 @@ class DataFoundationBuilder:
                     datetime,
                     /* Rank positive values by ascending |centDistLstCandle| */
                     DENSE_RANK() OVER (ORDER BY ABS(centDistLstCandle)) AS rank_val
-                FROM {fractal_table_name}
+                FROM {self.working_table_name}
                 WHERE centDistLstCandle > 0
             ),
             neg AS (
@@ -419,7 +446,7 @@ class DataFoundationBuilder:
                     /* Rank negative values by ascending |centDistLstCandle|,
                     then make it negative */
                     -DENSE_RANK() OVER (ORDER BY ABS(centDistLstCandle)) AS rank_val
-                FROM {fractal_table_name}
+                FROM {self.working_table_name}
                 WHERE centDistLstCandle < 0
             ),
             all_ranks AS (
@@ -428,37 +455,16 @@ class DataFoundationBuilder:
                 UNION ALL
                 SELECT datetime, rank_val AS cent_dist_lst_candle_rank FROM neg
             )
-            UPDATE {fractal_table_name}
+            UPDATE {self.working_table_name}
             SET centDistLstCandleRank = all_ranks.cent_dist_lst_candle_rank
             FROM all_ranks
-            WHERE {fractal_table_name}.datetime = all_ranks.datetime;
+            WHERE {self.working_table_name}.datetime = all_ranks.datetime;
         """)
 
         self.con.sql(f"""
-            UPDATE {fractal_table_name}
+            UPDATE {self.working_table_name}
             SET overallRank = (centDistMeanRank + centCountRank) / 2
         """)
-
-    def get_table(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name}")
-
-    def build_fractal_clusters(self, fractal_table_name: str):
-
-        self._generate_input_data(fractal_table_name)
-        self._generate_last_candle_price(fractal_table_name)
-        self._generate_index_data(fractal_table_name)
-        self._generate_fractal_data(fractal_table_name)
-        self._generate_cluster_data(fractal_table_name,
-                                    self.candle_price_point,
-                                    self.cluster_count)
-        self._generate_cent_dist(fractal_table_name)
-        self._remove_outliers(fractal_table_name)
-        self._generate_cent_dist_lst_candle(fractal_table_name)
-        self._generate_cent_count(fractal_table_name)
-        self._generate_score(fractal_table_name)
-        self._generate_rank(fractal_table_name)
-        if self.to_csv:
-            self._to_csv(fractal_table_name)
 
 
 class SupportResistanceBuilder:
@@ -1976,33 +1982,56 @@ candlestick_patterns = {
 
 start_time = time.time()
 
-# print("Building data foundation")
+print("Building data foundation")
 
-# for instrument in params["instruments"]:
+fractal_cluster_builder = FractalClusterBuilder(
+    "./database/clarity.db",
+    params["max_bars"],
+    params["cluster_count"],
+    params["outlier_threshold"],
+    params["candle_price_point"])
 
-#     for timeframe in params["timeframes"]:
+for instrument in params["instruments"]:
 
-#         for fractal_period in params["fractal_period"][timeframe]:
-#             fractal_table_name = (f"tbl_EOD_{instrument}_"
-#                                   f"{timeframe}_"
-#                                   f"f{fractal_period}_"
-#                                   f"k{params['cluster_count']}")
+    for timeframe in params["timeframes"]:
 
-#             print(f"Building {fractal_table_name}")
+        for fractal_period in params["fractal_period"][timeframe]:
 
-#             data_foundation_builder = DataFoundationBuilder(
-#                         "./database/clarity_copy.db",
-#                         "EOD",
-#                         instrument,
-#                         timeframe,
-#                         params["max_bars"],
-#                         fractal_period,
-#                         params["cluster_count"],
-#                         params["outlier_threshold"],
-#                         params["candle_price_point"],
-#                         params["to_csv"])
+            source_table_name = (f"tbl_{params['data_source']}_"
+                                 f"{instrument}_"
+                                 f"{timeframe}")
 
-#             data_foundation_builder.build_fractal_clusters(fractal_table_name)
+            fractal_cluster_builder.set_source_table_name(source_table_name)
+
+            working_table_name = (f"tbl_{params['data_source']}_"
+                                  f"{instrument}_"
+                                  f"{timeframe}_"
+                                  f"f{fractal_period}_"
+                                  f"k{params['cluster_count']}")
+
+            fractal_cluster_builder.set_working_table_name(working_table_name)
+
+            print(f"Building {working_table_name}")
+
+            fractal_cluster_builder.reset_table()
+            fractal_cluster_builder.set_instrument_name(instrument)
+            fractal_cluster_builder.set_timeframe(timeframe)
+            fractal_cluster_builder.set_fractal_period(fractal_period)
+            fractal_cluster_builder.set_output_folder("fractals")
+            fractal_cluster_builder.generate_input_data()
+            fractal_cluster_builder.generate_last_candle_price()
+            fractal_cluster_builder.generate_index_data()
+            fractal_cluster_builder.generate_fractal_data()
+            fractal_cluster_builder.generate_cluster_data()
+            fractal_cluster_builder.generate_cent_dist()
+            fractal_cluster_builder.remove_outliers()
+            fractal_cluster_builder.generate_cent_dist_lst_candle()
+            fractal_cluster_builder.generate_cent_count()
+            fractal_cluster_builder.generate_score()
+            fractal_cluster_builder.generate_rank()
+
+            if params["to_csv"]:
+                fractal_cluster_builder.to_csv(working_table_name)
 
 # print("Appending data to support resistance table")
 
@@ -2129,25 +2158,25 @@ start_time = time.time()
 #             candle_pattern_builder.to_csv(candle_pattern_builder.table_name)
 
 
-pattern_convergence_divergence_builder = PatternConvergenceDivergenceBuilder(
-    "./database/clarity_copy.db", "EOD")
+# pattern_convergence_divergence_builder = PatternConvergenceDivergenceBuilder(
+#     "./database/clarity_copy.db", "EOD")
 
-pattern_convergence_divergence_builder.reset_pattern_convergence_divergence_table()
-for instrument in params["instruments"]:
-    for timeframe in params["timeframes"]:
-        for fractal_period in params["fractal_period"][timeframe]:
-            pattern_convergence_divergence_builder.set_instrument_name(instrument)
-            pattern_convergence_divergence_builder.set_timeframe(timeframe)
-            pattern_convergence_divergence_builder.set_fractal_period(fractal_period)
-            pattern_convergence_divergence_builder.set_cluster_count(
-                params["cluster_count"])
-            pattern_convergence_divergence_builder.set_atr_threshold(
-                params["atr_threshold"])
-            pattern_convergence_divergence_builder.set_source_table_name()
-            pattern_convergence_divergence_builder \
-                .generate_pattern_convergence_divergence()
+# pattern_convergence_divergence_builder.reset_pattern_convergence_divergence_table()
+# for instrument in params["instruments"]:
+#     for timeframe in params["timeframes"]:
+#         for fractal_period in params["fractal_period"][timeframe]:
+#             pattern_convergence_divergence_builder.set_instrument_name(instrument)
+#             pattern_convergence_divergence_builder.set_timeframe(timeframe)
+#             pattern_convergence_divergence_builder.set_fractal_period(fractal_period)
+#             pattern_convergence_divergence_builder.set_cluster_count(
+#                 params["cluster_count"])
+#             pattern_convergence_divergence_builder.set_atr_threshold(
+#                 params["atr_threshold"])
+#             pattern_convergence_divergence_builder.set_source_table_name()
+#             pattern_convergence_divergence_builder \
+#                 .generate_pattern_convergence_divergence()
 
-pattern_convergence_divergence_builder.to_csv(
-    pattern_convergence_divergence_builder.table_name)
+# pattern_convergence_divergence_builder.to_csv(
+#     pattern_convergence_divergence_builder.table_name)
 end_time = time.time()
 print(f"Time taken: {end_time - start_time} seconds")
