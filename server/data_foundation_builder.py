@@ -1513,6 +1513,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         print(output)
+        print("test")
 
     def to_csv(self, table_name: str):
         self.con.sql(f"""
