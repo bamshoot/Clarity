@@ -30,13 +30,6 @@ class DataFoundationBuilder:
     def drop_table(self, table_name: str):
         self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
 
-    def create_table(self, table_name: str):
-        pass
-
-    def reset_table(self, table_name: str):
-        self.drop_table(table_name)
-        self.create_table(table_name)
-
     def set_data_source(self, data_source: str):
         self.data_source = data_source
 
@@ -74,12 +67,7 @@ class FractalClusterBuilder(DataFoundationBuilder):
         self.cluster_count = cluster_count
         self.outlier_threshold = outlier_threshold
         self.candle_price_point = candle_price_point
-        self.source_table_name = None
-        self.working_table_name = None
-        self.threshold = self.con.sql(f"""
-            SELECT (MAX(close) - MIN(close)) * {self.outlier_threshold}
-            FROM {self.source_table_name}
-        """).fetchone()[0]
+        self.threshold = None
 
     def get_table_from_db(self, table_name: str):
         return self.con.sql(f"SELECT * FROM {table_name} ORDER BY datetime")
@@ -195,6 +183,12 @@ class FractalClusterBuilder(DataFoundationBuilder):
     def set_fractal_period(self, fractal_period: int):
         self.fractal_period = fractal_period
 
+    def set_threshold(self):
+        self.threshold = self.con.sql(f"""
+            SELECT (MAX(close) - MIN(close)) * {self.outlier_threshold}
+            FROM {self.source_table_name}
+        """).fetchone()[0]
+
     def generate_input_data(self):
         self.con.sql(f"""
             UPDATE {self.working_table_name}
@@ -308,6 +302,10 @@ class FractalClusterBuilder(DataFoundationBuilder):
             ORDER BY t.datetime;
         """)
 
+        # print(self.con.sql(f"""
+        #     SELECT COUNT(*) FROM {self.working_table_name}_temp
+        # """).fetchone()[0])
+
         self.con.sql(f"""
             UPDATE {self.working_table_name} t
             SET uf = temp.uf_temp,
@@ -324,6 +322,10 @@ class FractalClusterBuilder(DataFoundationBuilder):
             WHERE uf = true OR lf = true
             ORDER BY idx
         """)
+
+        # print(self.con.sql(f"""
+        #     SELECT COUNT(*) FROM {self.working_table_name}_temp
+        # """).fetchone()[0])
 
         self.drop_table(f"{self.working_table_name}")
 
@@ -467,35 +469,16 @@ class FractalClusterBuilder(DataFoundationBuilder):
         """)
 
 
-class SupportResistanceBuilder:
-    def __init__(self,
-                 db_path: str,
-                 data_source: str):
-        self.db_path = db_path
-        self.con = duckdb.connect(self.db_path)
-        self.data_source = data_source
-        self.instrument_name = None
-        self.timeframe = None
+class SupportResistanceBuilder(DataFoundationBuilder):
+    def __init__(self, db_path: str):
+        super().__init__(db_path)
         self.fractal_period = None
         self.cluster_count = None
-        self.table_name = (f"tbl_{self.data_source}_SupportResistance")
-        self.fractal_table_name = (f"{self.table_name}_"
-                                   f"f{self.fractal_period}_"
-                                   f"k{self.cluster_count}")
+        self.working_table_name = (f"tbl_{self.data_source}_SupportResistance")
 
-    def __del__(self):
-        if hasattr(self, 'con'):
-            self.con.close()
-
-    def get_table_from_db(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name}")
-
-    def drop_table(self, table_name: str):
-        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
-
-    def create_table(self, table_name: str):
+    def create_table(self):
         self.con.sql(f"""
-            CREATE TABLE {table_name}
+            CREATE TABLE {self.working_table_name}
             (
                 instrument_name VARCHAR,
                 timeframe VARCHAR,
@@ -512,52 +495,40 @@ class SupportResistanceBuilder:
             )
         """)
 
-    def set_instrument_name(self, instrument_name: str):
-        self.instrument_name = instrument_name
-
-    def set_timeframe(self, timeframe: str):
-        self.timeframe = timeframe
-
     def set_fractal_period(self, fractal_period: int):
         self.fractal_period = fractal_period
 
     def set_cluster_count(self, cluster_count: int):
         self.cluster_count = cluster_count
 
-    def append_data_to_table(self, table_name: str, fractal_table_name: str):
-        self.con.sql(f"""
-            INSERT INTO {table_name}
-            SELECT DISTINCT '{self.instrument_name}' as instrument_name,
-                   '{self.timeframe}' as timeframe,
-                   clust, cent, centDistMean, centCount, centDistLstCandle,
-                   centDistLstCandleRank, centDistMeanRank, centCountRank,
-                   score, overallRank
-            FROM {fractal_table_name}
-        """)
+    def append_data_to_table(self):
+        query = f"""
+            INSERT INTO {self.working_table_name}
+            SELECT DISTINCT
+                '{self.instrument_name}' as instrument_name,
+                '{self.timeframe}' as timeframe,
+                clust,
+                cent,
+                centDistMean,
+                centCount,
+                centDistLstCandle,
+                centDistLstCandleRank,
+                centDistMeanRank,
+                centCountRank,
+                score,
+                overallRank
+            FROM {self.source_table_name}
+        """
+        self.con.execute(query)
 
-    def to_csv(self, table_name: str):
-        self.con.sql(f"""
-            SELECT * FROM {table_name} ORDER BY instrument_name, timeframe, clust
-        """).write_csv(f"./outputs/sr/{table_name}.csv")
 
-
-class PinescriptBuilder:
-    def __init__(self, db_path: str, data_source: str):
-        self.db_path = db_path
-        self.con = duckdb.connect(self.db_path)
-        self.data_source = data_source
-        self.table_name = (f"tbl_{self.data_source}_SupportResistance")
-
-    def __del__(self):
-        if hasattr(self, 'con'):
-            self.con.close()
-
-    def _get_table_from_db(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name}")
+class PinescriptBuilder(DataFoundationBuilder):
+    def __init__(self, db_path: str):
+        super().__init__(db_path)
 
     def _reset_pinescript_file(self):
-        for file in os.listdir("./outputs/pinescript"):
-            with open(f"./outputs/pinescript/{file}", "w") as f:
+        for file in os.listdir(f"./outputs/{self.output_folder}"):
+            with open(f"./outputs/{self.output_folder}/{file}", "w") as f:
                 instrument_name = file.split("_")[1]
                 instrument_name = instrument_name.replace(".txt", "")
                 f.write(f"""
@@ -582,7 +553,7 @@ symbol = syminfo.ticker
     def build_pinescript(self, table_name: str):
         self._reset_pinescript_file()
 
-        sr = self._get_table_from_db(table_name).fetchall()
+        sr = self.get_table_from_db(table_name).fetchall()
 
         show_timeframe = None
         color = None
@@ -606,7 +577,7 @@ symbol = syminfo.ticker
 
             file_name = f"{self.data_source}_{instrument_name}"
 
-            with open(f"./outputs/pinescript/{file_name}.txt", "a") as f:
+            with open(f"./outputs/{self.output_folder}/{file_name}.txt", "a") as f:
                 f.write(f"""plot({show_timeframe} and"""
                         f""" symbol == '{row[0]}'?{row[3]:.4f}:na,"""
                         f""" "Cluster = {row[2]}","""
@@ -1982,107 +1953,114 @@ candlestick_patterns = {
 
 start_time = time.time()
 
-print("Building data foundation")
+# print("Building data foundation")
 
-fractal_cluster_builder = FractalClusterBuilder(
-    "./database/clarity.db",
-    params["max_bars"],
-    params["cluster_count"],
-    params["outlier_threshold"],
-    params["candle_price_point"])
-
-for instrument in params["instruments"]:
-
-    for timeframe in params["timeframes"]:
-
-        for fractal_period in params["fractal_period"][timeframe]:
-
-            source_table_name = (f"tbl_{params['data_source']}_"
-                                 f"{instrument}_"
-                                 f"{timeframe}")
-
-            fractal_cluster_builder.set_source_table_name(source_table_name)
-
-            working_table_name = (f"tbl_{params['data_source']}_"
-                                  f"{instrument}_"
-                                  f"{timeframe}_"
-                                  f"f{fractal_period}_"
-                                  f"k{params['cluster_count']}")
-
-            fractal_cluster_builder.set_working_table_name(working_table_name)
-
-            print(f"Building {working_table_name}")
-
-            fractal_cluster_builder.reset_table()
-            fractal_cluster_builder.set_instrument_name(instrument)
-            fractal_cluster_builder.set_timeframe(timeframe)
-            fractal_cluster_builder.set_fractal_period(fractal_period)
-            fractal_cluster_builder.set_output_folder("fractals")
-            fractal_cluster_builder.generate_input_data()
-            fractal_cluster_builder.generate_last_candle_price()
-            fractal_cluster_builder.generate_index_data()
-            fractal_cluster_builder.generate_fractal_data()
-            fractal_cluster_builder.generate_cluster_data()
-            fractal_cluster_builder.generate_cent_dist()
-            fractal_cluster_builder.remove_outliers()
-            fractal_cluster_builder.generate_cent_dist_lst_candle()
-            fractal_cluster_builder.generate_cent_count()
-            fractal_cluster_builder.generate_score()
-            fractal_cluster_builder.generate_rank()
-
-            if params["to_csv"]:
-                fractal_cluster_builder.to_csv(working_table_name)
-
-# print("Appending data to support resistance table")
-
-# support_resistance_builder = SupportResistanceBuilder(
+# fractal_cluster_builder = FractalClusterBuilder(
 #     "./database/clarity.db",
-#     "EOD")
+#     params["max_bars"],
+#     params["cluster_count"],
+#     params["outlier_threshold"],
+#     params["candle_price_point"])
 
-# support_resistance_builder.drop_table(support_resistance_builder.table_name)
-# support_resistance_builder.create_table(support_resistance_builder.table_name)
+# for instrument in params["instruments"]:
+
+#     for timeframe in params["timeframes"]:
+
+#         for fractal_period in params["fractal_period"][timeframe]:
+
+#             source_table_name = (f"tbl_{params['data_source']}_"
+#                                  f"{instrument}_"
+#                                  f"{timeframe}")
+
+#             fractal_cluster_builder.set_source_table_name(source_table_name)
+
+#             working_table_name = (f"tbl_{params['data_source']}_"
+#                                   f"{instrument}_"
+#                                   f"{timeframe}_"
+#                                   f"f{fractal_period}_"
+#                                   f"k{params['cluster_count']}")
+
+#             fractal_cluster_builder.set_working_table_name(working_table_name)
+
+#             print(f"Building {working_table_name}")
+
+#             fractal_cluster_builder.reset_table()
+#             fractal_cluster_builder.set_instrument_name(instrument)
+#             fractal_cluster_builder.set_timeframe(timeframe)
+#             fractal_cluster_builder.set_fractal_period(fractal_period)
+#             fractal_cluster_builder.set_output_folder("fractals")
+#             fractal_cluster_builder.set_threshold()
+#             fractal_cluster_builder.generate_input_data()
+#             fractal_cluster_builder.generate_last_candle_price()
+#             fractal_cluster_builder.generate_index_data()
+#             fractal_cluster_builder.generate_fractal_data()
+#             fractal_cluster_builder.generate_cluster_data()
+#             fractal_cluster_builder.generate_cent_dist()
+#             fractal_cluster_builder.remove_outliers()
+#             fractal_cluster_builder.generate_cent_dist_lst_candle()
+#             fractal_cluster_builder.generate_cent_count()
+#             fractal_cluster_builder.generate_score()
+#             fractal_cluster_builder.generate_rank()
+
+#             if params["to_csv"]:
+#                 fractal_cluster_builder.to_csv(working_table_name)
+
+# print("Building support resistance table")
+
+# support_resistance_builder = SupportResistanceBuilder("./database/clarity.db")
+
+# support_resistance_builder.set_data_source(params["data_source"])
+# support_resistance_builder.set_working_table_name(f"tbl_{params['data_source']}_"
+#                                                   f"Support_Resistance")
+# support_resistance_builder.drop_table(support_resistance_builder.working_table_name)
+# support_resistance_builder.create_table()
 
 # for instrument in params["instruments"]:
 #     for timeframe in params["timeframes"]:
-#         fractal_table_name = (f"tbl_EOD_{instrument}_"
-#                               f"{timeframe}_"
-#                               f"f{params['fractal_period']}_"
-#                               f"k{params['cluster_count']}")
+#         source_table_name = (f"tbl_{params['data_source']}_"
+#                              f"{instrument}_"
+#                              f"{timeframe}_"
+#                              f"f2_"
+#                              f"k{params['cluster_count']}")
 
+#         support_resistance_builder.set_source_table_name(source_table_name)
 #         support_resistance_builder.set_instrument_name(instrument)
 #         support_resistance_builder.set_timeframe(timeframe)
-#         support_resistance_builder.set_fractal_period(params["fractal_period"])
+#         support_resistance_builder.set_output_folder("sr")
+#         support_resistance_builder.set_fractal_period(2)
 #         support_resistance_builder.set_cluster_count(params["cluster_count"])
-
-#         support_resistance_builder.append_data_to_table(
-#             support_resistance_builder.table_name,
-#             fractal_table_name)
+#         support_resistance_builder.append_data_to_table()
 
 # if params["to_csv"]:
-#     support_resistance_builder.to_csv(support_resistance_builder.table_name)
+#     support_resistance_builder.to_csv(support_resistance_builder.working_table_name)
 
 
 # print("Building pinescript")
 
-# pinescript_builder = PinescriptBuilder("./database/clarity.db", "EOD")
+# pinescript_builder = PinescriptBuilder("./database/clarity.db")
 
-# pinescript_builder.build_pinescript(pinescript_builder.table_name)
+# pinescript_builder.set_data_source(params["data_source"])
+# pinescript_builder.set_output_folder("pinescript")
+# pinescript_builder.set_source_table_name(f"tbl_{params['data_source']}_"
+#                                          f"Support_Resistance")
 
-# print("Building trend indicator")
+# pinescript_builder.build_pinescript(pinescript_builder.source_table_name)
 
-# trend_indicator_builder = TrendIndicatorBuilder("./database/clarity.db", "EOD")
+print("Building trend indicator")
 
-# for instrument in params["instruments"]:
-#     for timeframe in params["timeframes"]:
-#         trend_indicator_builder.set_instrument_name(instrument)
-#         trend_indicator_builder.set_timeframe(timeframe)
-#         trend_indicator_builder.set_source_table_name()
-#         trend_indicator_builder.generate_trends()
+trend_indicator_builder = TrendIndicatorBuilder("./database/clarity.db", "EOD")
 
-# if params["to_csv"]:
-#     trend_indicator_builder.to_csv(trend_indicator_builder.table_name)
+for instrument in params["instruments"]:
+    for timeframe in params["timeframes"]:
+        trend_indicator_builder.set_instrument_name(instrument)
+        trend_indicator_builder.set_timeframe(timeframe)
+        trend_indicator_builder.set_source_table_name()
+        trend_indicator_builder.generate_trends()
 
-# print("Building price proximity")
+if params["to_csv"]:
+    trend_indicator_builder.to_csv(trend_indicator_builder.table_name)
+
+print("Building price proximity")
 
 
 # async def process_all_instruments():
