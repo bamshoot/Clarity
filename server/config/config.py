@@ -27,6 +27,8 @@ class Config:
             "OANDA_INSTRUMENTS": "config/settings/oanda_instruments.json",
             "OANDA_TRADE": "config/settings/oanda_trade.json",
             "EOD_INSTRUMENTS": "config/settings/eod_instruments.json",
+            "EOD_MnTrd_PARAMS": "config/settings/eod_manual_trading_params.json",
+            "Candle_Patterns": "config/settings/candle_patterns.json",
         }
         for key, file_path in json_files.items():
             with open(file_path, "r") as f:
