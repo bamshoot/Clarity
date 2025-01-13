@@ -1060,40 +1060,17 @@ class MACDPriceConvergenceDivergenceBuilder(DataFoundationBuilder):
         """)
 
 
-class PatternConvergenceDivergenceBuilder:
+class PatternConvergenceDivergenceBuilder(DataFoundationBuilder):
 
-    def __init__(self, db_path: str, data_source: str):
-        self.db_path = db_path
-        self.con = duckdb.connect(self.db_path)
-        self.data_source = data_source
-        self.instrument_name = None
-        self.timeframe = None
+    def __init__(self, db_path: str):
+        super().__init__(db_path)
         self.fractal_period = None
         self.cluster_count = None
         self.atr_threshold = None
-        self.source_table_name = None
-        self.table_name = (f"tbl_{self.data_source}_"
-                           f"pattern_convergence_divergence")
-
-    def __del__(self):
-        if hasattr(self, 'con'):
-            self.con.close()
-
-    def _get_table_from_db(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name}")
-
-    def _drop_table(self, table_name: str):
-        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
 
     def reset_pattern_convergence_divergence_table(self):
-        self._drop_table(self.table_name)
+        self.drop_table(self.working_table_name)
         self._create_pattern_convergence_divergence_table()
-
-    def set_instrument_name(self, instrument_name: str):
-        self.instrument_name = instrument_name
-
-    def set_timeframe(self, timeframe: str):
-        self.timeframe = timeframe
 
     def set_fractal_period(self, fractal_period: int):
         self.fractal_period = fractal_period
@@ -1104,16 +1081,9 @@ class PatternConvergenceDivergenceBuilder:
     def set_atr_threshold(self, atr_threshold: float):
         self.atr_threshold = atr_threshold
 
-    def set_source_table_name(self):
-        self.source_table_name = (f"tbl_{self.data_source}_"
-                                  f"{self.instrument_name}_"
-                                  f"{self.timeframe}_"
-                                  f"f{self.fractal_period}_"
-                                  f"k{self.cluster_count}")
-
     def _create_pattern_convergence_divergence_table(self):
         self.con.sql(f"""
-            CREATE TABLE {self.table_name}
+            CREATE TABLE {self.working_table_name}
             (
                 instrument_name VARCHAR,
                 timeframe VARCHAR,
@@ -1159,7 +1129,7 @@ class PatternConvergenceDivergenceBuilder:
 
     def generate_pattern_convergence_divergence(self):
 
-        data = self._get_table_from_db(self.source_table_name).fetchnumpy()
+        data = self.get_table_from_db(self.source_table_name).fetchnumpy()
         atr = ta.ATR(data["high"], data["low"], data["close"], 14)[-1]
 
         last_timestamp = self.con.sql(f"""
@@ -1233,7 +1203,7 @@ class PatternConvergenceDivergenceBuilder:
 
         # First INSERT statement
         self.con.sql(f"""
-            INSERT INTO {self.table_name}
+            INSERT INTO {self.working_table_name}
             (instrument_name,
             timeframe,
             f,
@@ -1261,7 +1231,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET
                 first_lower_x = temp.first_lower_x,
                 first_lower_y = temp.first_lower_y,
@@ -1270,13 +1240,13 @@ class PatternConvergenceDivergenceBuilder:
                 third_lower_x = temp.third_lower_x,
                 third_lower_y = temp.third_lower_y
             FROM temp_lf_transposed temp
-            WHERE {self.table_name}.instrument_name = '{self.instrument_name}'
-            AND {self.table_name}.timeframe = '{self.timeframe}'
-            AND {self.table_name}.f = {self.fractal_period}
+            WHERE {self.working_table_name}.instrument_name = '{self.instrument_name}'
+            AND {self.working_table_name}.timeframe = '{self.timeframe}'
+            AND {self.working_table_name}.f = {self.fractal_period}
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET max_first_x = GREATEST(first_upper_x, first_lower_x),
                 min_third_x = LEAST(third_upper_x, third_lower_x)
             WHERE instrument_name = '{self.instrument_name}'
@@ -1285,7 +1255,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET
                 upper_slope = (third_upper_y - first_upper_y) /
                     (third_upper_x - first_upper_x),
@@ -1298,7 +1268,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET
                 lower_slope = (third_lower_y - first_lower_y) /
                     (third_lower_x - first_lower_x),
@@ -1311,7 +1281,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET
                 y_at_max_first_x = upper_slope * max_first_x + upper_intercept,
                 y_at_min_third_x = lower_slope * min_third_x + lower_intercept,
@@ -1331,7 +1301,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET
                max_first_y = GREATEST(max_price, min_price),
             FROM temp_union
@@ -1339,7 +1309,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET
                min_third_y = GREATEST(max_price, min_price),
             FROM temp_union
@@ -1347,7 +1317,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET
                 dist_first = ABS(y_at_max_first_x - max_first_y),
                 dist_third = ABS(y_at_min_third_x - min_third_y),
@@ -1357,7 +1327,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET
                 dist_upper_second = ABS(y_at_upper_second_x - second_upper_y),
                 dist_lower_second = ABS(y_at_lower_second_x - second_lower_y),
@@ -1367,7 +1337,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET
                 upper_second_atr = dist_upper_second / atr *100,
                 lower_second_atr = dist_lower_second / atr *100,
@@ -1377,7 +1347,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET
                 dist_third_lt_first = dist_third < dist_first,
                 upper_second_within_atr = upper_second_atr < {self.atr_threshold},
@@ -1388,7 +1358,7 @@ class PatternConvergenceDivergenceBuilder:
         """)
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET
                 status = CASE
                     WHEN dist_third_lt_first = TRUE
@@ -1445,11 +1415,6 @@ class PatternConvergenceDivergenceBuilder:
         self.con.sql("""
             DROP TABLE IF EXISTS temp_union
         """)
-
-    def to_csv(self, table_name: str):
-        self.con.sql(f"""
-            SELECT * FROM {table_name}""").write_csv(
-                f"./outputs/pattern_cd/{table_name}.csv")
 
 
 class CandlePatternBuilder:
@@ -2010,6 +1975,39 @@ start_time = time.time()
 #     macd_price_cd_builder.to_csv(macd_price_cd_builder.working_table_name)
 
 
+pattern_convergence_divergence_builder = PatternConvergenceDivergenceBuilder(
+    "./database/clarity.db")
+pattern_convergence_divergence_builder.set_output_folder("pattern_cd")
+pattern_convergence_divergence_builder.set_data_source(params["data_source"])
+pattern_convergence_divergence_builder.set_working_table_name(
+    f"tbl_{params['data_source']}_"
+    f"pattern_cd")
+
+pattern_convergence_divergence_builder.reset_pattern_convergence_divergence_table()
+for instrument in params["instruments"]:
+    for timeframe in params["timeframes"]:
+        for fractal_period in params["fractal_period"][timeframe]:
+            pattern_convergence_divergence_builder.set_instrument_name(instrument)
+            pattern_convergence_divergence_builder.set_timeframe(timeframe)
+            pattern_convergence_divergence_builder.set_fractal_period(fractal_period)
+            pattern_convergence_divergence_builder.set_cluster_count(
+                params["cluster_count"])
+            pattern_convergence_divergence_builder.set_atr_threshold(
+                params["atr_threshold"])
+            pattern_convergence_divergence_builder.set_source_table_name(
+                f"tbl_{params['data_source']}_"
+                f"{instrument}_"
+                f"{timeframe}_"
+                f"f{fractal_period}_"
+                f"k{params['cluster_count']}")
+            pattern_convergence_divergence_builder \
+                .generate_pattern_convergence_divergence()
+
+if params["to_csv"]:
+    pattern_convergence_divergence_builder.to_csv(
+        pattern_convergence_divergence_builder.working_table_name)
+
+
 # print("Building candle patterns")
 # candle_pattern_builder = CandlePatternBuilder(
 #     "./database/clarity.db", "EOD", candle_patterns)
@@ -2027,26 +2025,5 @@ start_time = time.time()
 #             print(f"Writing {instrument} {timeframe} candle patterns to CSV")
 #             candle_pattern_builder.to_csv(candle_pattern_builder.table_name)
 
-
-# pattern_convergence_divergence_builder = PatternConvergenceDivergenceBuilder(
-#     "./database/clarity_copy.db", "EOD")
-
-# pattern_convergence_divergence_builder.reset_pattern_convergence_divergence_table()
-# for instrument in params["instruments"]:
-#     for timeframe in params["timeframes"]:
-#         for fractal_period in params["fractal_period"][timeframe]:
-#             pattern_convergence_divergence_builder.set_instrument_name(instrument)
-#             pattern_convergence_divergence_builder.set_timeframe(timeframe)
-#             pattern_convergence_divergence_builder.set_fractal_period(fractal_period)
-#             pattern_convergence_divergence_builder.set_cluster_count(
-#                 params["cluster_count"])
-#             pattern_convergence_divergence_builder.set_atr_threshold(
-#                 params["atr_threshold"])
-#             pattern_convergence_divergence_builder.set_source_table_name()
-#             pattern_convergence_divergence_builder \
-#                 .generate_pattern_convergence_divergence()
-
-# pattern_convergence_divergence_builder.to_csv(
-#     pattern_convergence_divergence_builder.table_name)
 end_time = time.time()
 print(f"Time taken: {end_time - start_time} seconds")
