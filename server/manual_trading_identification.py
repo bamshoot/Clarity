@@ -275,7 +275,7 @@ if __name__ == "__main__":
     build_rsi(config)
     build_macd_price_cd(config)
     build_pattern_cd(config)
-    # build_candle_pattern(config)
+    build_candle_pattern(config)
 
     end_time = time.time()
     print(f"Time taken: {end_time - start_time} seconds")
