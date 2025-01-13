@@ -6,7 +6,7 @@ import talib as ta
 import json
 from services.eod_data import EODData
 from config.config import Config
-import asyncio
+# import asyncio
 
 
 class DataFoundationBuilder:
@@ -827,13 +827,9 @@ class PriceProximityBuilder(DataFoundationBuilder):
         """)
 
 
-class RSIRankBuilder:
-    def __init__(self, db_path: str, data_source: str):
-        self.db_path = db_path
-        self.con = duckdb.connect(self.db_path)
-        self.data_source = data_source
-        self.instrument_name = None
-        self.timeframe = None
+class RSIRankBuilder(DataFoundationBuilder):
+    def __init__(self, db_path: str):
+        super().__init__(db_path)
         self.source_table_name = None
         self.pair_table_name = (f"tbl_{self.data_source}_pair_RSI_Rank")
         self.currency_table_name = (f"tbl_{self.data_source}_currency_RSI_Rank")
@@ -858,32 +854,17 @@ class RSIRankBuilder:
             'USD': {'1h': None, 'd': None, 'w': None, 'm': None}
         }
 
-    def __del__(self):
-        if hasattr(self, 'con'):
-            self.con.close()
-
-    def _get_table_from_db(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name}")
-
     def reset_rsi_ranks_table(self):
-        self._drop_table(self.pair_table_name)
-        self._drop_table(self.currency_table_name)
+        self.drop_table(self.pair_table_name)
+        self.drop_table(self.currency_table_name)
         self._create_pair_rsi_ranks_table()
         self._create_currency_rsi_ranks_table()
-
-    def _drop_table(self, table_name: str):
-        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
 
     def set_instrument_name(self, instrument_name: str):
         self.instrument_name = instrument_name
 
     def set_timeframe(self, timeframe: str):
         self.timeframe = timeframe
-
-    def set_source_table_name(self):
-        self.source_table_name = (f"tbl_{self.data_source}_"
-                                  f"{self.instrument_name}_"
-                                  f"{self.timeframe}")
 
     def _create_pair_rsi_ranks_table(self):
         self.con.sql(f"""
@@ -915,7 +896,7 @@ class RSIRankBuilder:
         """)
 
     def generate_rsi(self):
-        data = self._get_table_from_db(self.source_table_name).fetchnumpy()
+        data = self.get_table_from_db(self.source_table_name).fetchnumpy()
         rsi = ta.RSI(data["close"], 14)
         lst_price_datetime = data["datetime"][-1]
 
@@ -1027,45 +1008,18 @@ class RSIRankBuilder:
             )
         """)
 
-    def get_table(self, table_name: str):
-        return self.con.sql(f"""
-            SELECT * FROM {table_name}
-        """)
 
-    def to_csv(self, table_name: str):
-        self.con.sql(f"""
-            SELECT * FROM {table_name}""").write_csv(f"./outputs/rsi/{table_name}.csv")
-
-
-class MACDPriceConvergenceDivergenceBuilder:
-    def __init__(self, db_path: str, data_source: str):
-        self.db_path = db_path
-        self.con = duckdb.connect(self.db_path)
-        self.data_source = data_source
-        self.instrument_name = None
-        self.timeframe = None
-        self.source_table_name = None
-        self.table_name = (f"tbl_{self.data_source}_"
-                           f"macd_price_convergence_divergence")
-        self.reset_macd_convergence_divergence_table()
-
-    def __del__(self):
-        if hasattr(self, 'con'):
-            self.con.close()
-
-    def _get_table_from_db(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name}")
+class MACDPriceConvergenceDivergenceBuilder(DataFoundationBuilder):
+    def __init__(self, db_path: str):
+        super().__init__(db_path)
 
     def reset_macd_convergence_divergence_table(self):
-        self._drop_table(self.table_name)
+        self.drop_table(self.working_table_name)
         self._create_macd_convergence_divergence_table()
-
-    def _drop_table(self, table_name: str):
-        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
 
     def _create_macd_convergence_divergence_table(self):
         self.con.sql(f"""
-            CREATE TABLE {self.table_name}
+            CREATE TABLE {self.working_table_name}
             (
                 instrument_name VARCHAR,
                 timeframe VARCHAR,
@@ -1074,19 +1028,8 @@ class MACDPriceConvergenceDivergenceBuilder:
             )
         """)
 
-    def set_instrument_name(self, instrument_name: str):
-        self.instrument_name = instrument_name
-
-    def set_timeframe(self, timeframe: str):
-        self.timeframe = timeframe
-
-    def set_source_table_name(self):
-        self.source_table_name = (f"tbl_{self.data_source}_"
-                                  f"{self.instrument_name}_"
-                                  f"{self.timeframe}")
-
     def generate_macd_convergence_divergence(self):
-        data = self._get_table_from_db(self.source_table_name).fetchnumpy()
+        data = self.get_table_from_db(self.source_table_name).fetchnumpy()
 
         slope_length = 5
 
@@ -1108,23 +1051,13 @@ class MACDPriceConvergenceDivergenceBuilder:
             status = "convergence"
 
         self.con.sql(f"""
-            INSERT INTO {self.table_name}
+            INSERT INTO {self.working_table_name}
                 (instrument_name, timeframe, macd_price_cd, status)
             VALUES ('{self.instrument_name}',
                     '{self.timeframe}',
                      {macd_price_cd},
                     '{status}')
         """)
-
-    def get_table(self, table_name: str):
-        return self.con.sql(f"""
-            SELECT * FROM {table_name}
-        """)
-
-    def to_csv(self, table_name: str):
-        self.con.sql(f"""
-            SELECT * FROM {table_name}""").write_csv(
-                f"./outputs/macd_price_cd/{table_name}.csv")
 
 
 class PatternConvergenceDivergenceBuilder:
@@ -1996,52 +1929,55 @@ start_time = time.time()
 # if params["to_csv"]:
 #     trend_indicator_builder.to_csv(trend_indicator_builder.working_table_name)
 
-print("Building price proximity")
+# print("Building price proximity")
 
-config = Config()
-eod_data_service = EODData(config.EOD_URL, config.EOD_API_KEY)
+# config = Config()
+# eod_data_service = EODData(config.EOD_URL, config.EOD_API_KEY)
 
 
-async def process_all_instruments(config: Config, eod_data_service: EODData):
-    price_proximity_builder = PriceProximityBuilder(
-        "./database/clarity.db", config, eod_data_service)
-    price_proximity_builder.set_output_folder("price_proximity")
-    price_proximity_builder.set_data_source(params["data_source"])
-    price_proximity_builder.set_source_table_name(f"tbl_{params['data_source']}_"
-                                                  f"Support_Resistance")
-    price_proximity_builder.set_working_table_name(f"tbl_{params['data_source']}_"
-                                                   f"PriceProximity")
-    price_proximity_builder.reset_price_proximity_table()
+# async def process_all_instruments(config: Config, eod_data_service: EODData):
+#     price_proximity_builder = PriceProximityBuilder(
+#         "./database/clarity.db", config, eod_data_service)
+#     price_proximity_builder.set_output_folder("price_proximity")
+#     price_proximity_builder.set_data_source(params["data_source"])
+#     price_proximity_builder.set_source_table_name(f"tbl_{params['data_source']}_"
+#                                                   f"Support_Resistance")
+#     price_proximity_builder.set_working_table_name(f"tbl_{params['data_source']}_"
+#                                                    f"PriceProximity")
+#     price_proximity_builder.reset_price_proximity_table()
 
-    for instrument in params["instruments"]:
-        for timeframe in params["timeframes"]:
-            print(f"Building {instrument} {timeframe}")
-            price_proximity_builder.set_exchange("FOREX")
-            price_proximity_builder.set_instrument_name(instrument)
-            price_proximity_builder.set_timeframe(timeframe)
-            price_proximity_builder.set_source_table_name(
-                f"tbl_{params['data_source']}_"
-                f"{instrument}_"
-                f"{timeframe}")
-            await price_proximity_builder.append_price_atr()
-            price_proximity_builder.calculate_price_proximity()
+#     for instrument in params["instruments"]:
+#         for timeframe in params["timeframes"]:
+#             print(f"Building {instrument} {timeframe}")
+#             price_proximity_builder.set_exchange("FOREX")
+#             price_proximity_builder.set_instrument_name(instrument)
+#             price_proximity_builder.set_timeframe(timeframe)
+#             price_proximity_builder.set_source_table_name(
+#                 f"tbl_{params['data_source']}_"
+#                 f"{instrument}_"
+#                 f"{timeframe}")
+#             await price_proximity_builder.append_price_atr()
+#             price_proximity_builder.calculate_price_proximity()
 
-    if params["to_csv"]:
-        price_proximity_builder.to_csv(price_proximity_builder.working_table_name)
+#     if params["to_csv"]:
+#         price_proximity_builder.to_csv(price_proximity_builder.working_table_name)
 
-asyncio.run(process_all_instruments(config, eod_data_service))
+# asyncio.run(process_all_instruments(config, eod_data_service))
 
 # print("Building RSI ranks")
 
-# rsi_rank_builder = RSIRankBuilder("./database/clarity.db", "EOD")
+# rsi_rank_builder = RSIRankBuilder("./database/clarity.db")
 # rsi_rank_builder.reset_rsi_ranks_table()
+# rsi_rank_builder.set_output_folder("rsi")
 
 # for instrument in params["instruments"]:
 #     for timeframe in params["timeframes"]:
 #         print(f"Building {instrument} {timeframe}")
 #         rsi_rank_builder.set_instrument_name(instrument)
 #         rsi_rank_builder.set_timeframe(timeframe)
-#         rsi_rank_builder.set_source_table_name()
+#         rsi_rank_builder.set_source_table_name(f"tbl_{params['data_source']}_"
+#                                                f"{instrument}_"
+#                                                f"{timeframe}")
 #         rsi_rank_builder.generate_rsi()
 
 # rsi_rank_builder.generate_pair_timeframe_rank()
@@ -2054,17 +1990,24 @@ asyncio.run(process_all_instruments(config, eod_data_service))
 
 # print("Building MACD Price Convergence Divergence")
 
-# macd_price_cd_builder = MACDPriceConvergenceDivergenceBuilder(
-#     "./database/clarity.db", "EOD")
+# macd_price_cd_builder = MACDPriceConvergenceDivergenceBuilder("./database/clarity.db")
+# macd_price_cd_builder.set_output_folder("macd_price_cd")
+# macd_price_cd_builder.set_data_source(params["data_source"])
+# macd_price_cd_builder.set_working_table_name(f"tbl_{params['data_source']}_"
+#                                              f"macd_price_cd")
+# macd_price_cd_builder.reset_macd_convergence_divergence_table()
+
 # for instrument in params["instruments"]:
 #     for timeframe in params["timeframes"]:
 #         macd_price_cd_builder.set_instrument_name(instrument)
 #         macd_price_cd_builder.set_timeframe(timeframe)
-#         macd_price_cd_builder.set_source_table_name()
+#         macd_price_cd_builder.set_source_table_name(f"tbl_{params['data_source']}_"
+#                                                     f"{instrument}_"
+#                                                     f"{timeframe}")
 #         macd_price_cd_builder.generate_macd_convergence_divergence()
 
 # if params["to_csv"]:
-#     macd_price_cd_builder.to_csv(macd_price_cd_builder.table_name)
+#     macd_price_cd_builder.to_csv(macd_price_cd_builder.working_table_name)
 
 
 # print("Building candle patterns")
