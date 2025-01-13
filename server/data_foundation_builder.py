@@ -756,69 +756,40 @@ class TrendIndicatorBuilder(DataFoundationBuilder):
                                        slope_run)
 
 
-class PriceProximityBuilder:
-    def __init__(self, db_path: str, data_source: str):
-        self.db_path = db_path
-        self.con = duckdb.connect(self.db_path)
-        self.data_source = data_source
-        self.instrument_name = None
+class PriceProximityBuilder(DataFoundationBuilder):
+    def __init__(self, db_path: str, config: Config, eod_data_service: EODData):
+        super().__init__(db_path)
         self.exchange = None
-        self.timeframe = None
-        self.source_table_name = None
-        self.sr_table_name = f"tbl_{self.data_source}_SupportResistance"
-        self.table_name = (f"tbl_{self.data_source}_PriceProximity")
-        self._reset_price_proximity_table()
-        config = Config()
-        self.eod_data_service = EODData(config.EOD_URL, config.EOD_API_KEY)
+        self.config = config
+        self.eod_data_service = eod_data_service
 
-    def __del__(self):
-        if hasattr(self, 'con'):
-            self.con.close()
-
-    def _get_table_from_db(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name}")
-
-    def _reset_price_proximity_table(self):
-        self._drop_table(self.table_name)
+    def reset_price_proximity_table(self):
+        self.drop_table(self.working_table_name)
         self._create_price_proximity_table()
-
-    def set_instrument_name(self, instrument_name: str):
-        self.instrument_name = instrument_name
 
     def set_exchange(self, exchange: str):
         self.exchange = exchange
 
-    def set_timeframe(self, timeframe: str):
-        self.timeframe = timeframe
-
-    def set_source_table_name(self):
-        self.source_table_name = (f"tbl_{self.data_source}_"
-                                  f"{self.instrument_name}_"
-                                  f"{self.timeframe}")
-
-    def _drop_table(self, table_name: str):
-        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
-
     def _create_price_proximity_table(self):
 
         self.con.sql(f"""
-            CREATE TABLE {self.table_name}
-            AS SELECT * FROM {self.sr_table_name}
+            CREATE TABLE {self.working_table_name}
+            AS SELECT * FROM {self.source_table_name}
         """)
         self.con.sql(f"""
-            ALTER TABLE {self.table_name} ADD COLUMN lst_price_timestamp BIGINT
+            ALTER TABLE {self.working_table_name} ADD COLUMN lst_price_timestamp BIGINT
         """)
         self.con.sql(f"""
-            ALTER TABLE {self.table_name} ADD COLUMN lst_price DOUBLE
+            ALTER TABLE {self.working_table_name} ADD COLUMN lst_price DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {self.table_name} ADD COLUMN lst_price_cent_dist DOUBLE
+            ALTER TABLE {self.working_table_name} ADD COLUMN lst_price_cent_dist DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {self.table_name} ADD COLUMN atr DOUBLE
+            ALTER TABLE {self.working_table_name} ADD COLUMN atr DOUBLE
         """)
         self.con.sql(f"""
-            ALTER TABLE {self.table_name} ADD COLUMN proximity DOUBLE
+            ALTER TABLE {self.working_table_name} ADD COLUMN proximity DOUBLE
         """)
 
     async def _get_last_price(self):
@@ -829,7 +800,7 @@ class PriceProximityBuilder:
         return last_price["timestamp"], last_price["close"]
 
     def _get_atr(self):
-        data = self._get_table_from_db(self.source_table_name).fetchnumpy()
+        data = self.get_table_from_db(self.source_table_name).fetchnumpy()
         atr = ta.ATR(data["high"], data["low"], data["close"], 14)
         return atr[-1]
 
@@ -839,7 +810,7 @@ class PriceProximityBuilder:
         atr = self._get_atr()
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET lst_price_timestamp = {timestamp},
                 lst_price = {price},
                 atr = {atr}
@@ -850,20 +821,10 @@ class PriceProximityBuilder:
     def calculate_price_proximity(self):
 
         self.con.sql(f"""
-            UPDATE {self.table_name}
+            UPDATE {self.working_table_name}
             SET lst_price_cent_dist = lst_price - cent,
                 proximity = lst_price_cent_dist / atr
         """)
-
-    def get_proximity_table(self):
-        return self.con.sql(f"""
-            SELECT * FROM {self.table_name}
-        """)
-
-    def to_csv(self, table_name: str):
-        self.con.sql(f"""
-            SELECT * FROM {table_name} ORDER BY instrument_name, timeframe
-        """).write_csv(f"./outputs/price_proximity/{table_name}.csv")
 
 
 class RSIRankBuilder:
@@ -2037,25 +1998,38 @@ start_time = time.time()
 
 print("Building price proximity")
 
+config = Config()
+eod_data_service = EODData(config.EOD_URL, config.EOD_API_KEY)
 
-async def process_all_instruments():
-    price_proximity_builder = PriceProximityBuilder("./database/clarity.db", "EOD")
+
+async def process_all_instruments(config: Config, eod_data_service: EODData):
+    price_proximity_builder = PriceProximityBuilder(
+        "./database/clarity.db", config, eod_data_service)
+    price_proximity_builder.set_output_folder("price_proximity")
+    price_proximity_builder.set_data_source(params["data_source"])
+    price_proximity_builder.set_source_table_name(f"tbl_{params['data_source']}_"
+                                                  f"Support_Resistance")
+    price_proximity_builder.set_working_table_name(f"tbl_{params['data_source']}_"
+                                                   f"PriceProximity")
+    price_proximity_builder.reset_price_proximity_table()
 
     for instrument in params["instruments"]:
         for timeframe in params["timeframes"]:
             print(f"Building {instrument} {timeframe}")
-            price_proximity_builder.set_instrument_name(instrument)
             price_proximity_builder.set_exchange("FOREX")
+            price_proximity_builder.set_instrument_name(instrument)
             price_proximity_builder.set_timeframe(timeframe)
-            price_proximity_builder.set_source_table_name()
+            price_proximity_builder.set_source_table_name(
+                f"tbl_{params['data_source']}_"
+                f"{instrument}_"
+                f"{timeframe}")
             await price_proximity_builder.append_price_atr()
             price_proximity_builder.calculate_price_proximity()
 
     if params["to_csv"]:
-        price_proximity_builder.to_csv(price_proximity_builder.table_name)
+        price_proximity_builder.to_csv(price_proximity_builder.working_table_name)
 
-# Replace the loop with:
-asyncio.run(process_all_instruments())
+asyncio.run(process_all_instruments(config, eod_data_service))
 
 # print("Building RSI ranks")
 
