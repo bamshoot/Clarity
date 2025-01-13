@@ -1,5 +1,5 @@
 
-from server.indicators.DataFoundationBuilder import DataFoundationBuilder
+from .DataFoundationBuilder import DataFoundationBuilder
 
 
 class SupportResistance(DataFoundationBuilder):

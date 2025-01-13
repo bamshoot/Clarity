@@ -1,5 +1,5 @@
 import kmeans1d
-from server.indicators.DataFoundationBuilder import DataFoundationBuilder
+from .DataFoundationBuilder import DataFoundationBuilder
 
 
 class FractalCluster(DataFoundationBuilder):

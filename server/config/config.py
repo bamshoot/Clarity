@@ -19,6 +19,7 @@ class Config:
                 "OANDA_URL": os.getenv("OANDA_URL"),
                 "EOD_API_KEY": os.getenv("EOD_API_KEY"),
                 "EOD_URL": os.getenv("EOD_URL"),
+                "DB_PATH": os.getenv("DB_PATH"),
             }
         )
 
@@ -29,6 +30,7 @@ class Config:
             "EOD_INSTRUMENTS": "config/settings/eod_instruments.json",
             "EOD_MnTrd_PARAMS": "config/settings/eod_manual_trading_params.json",
             "Candle_Patterns": "config/settings/candle_patterns.json",
+            "Trends": "config/settings/trends.json",
         }
         for key, file_path in json_files.items():
             with open(file_path, "r") as f:

@@ -15,6 +15,7 @@ import asyncio
 
 def build_fractal_cluster(config: Config):
     print("Building data foundation")
+    print(config.DB_PATH)
     fc = FractalCluster(
         config.DB_PATH,
         params["max_bars"],
@@ -66,11 +67,7 @@ def build_fractal_cluster(config: Config):
 
 def build_support_resistance(config: Config):
     print("Building support resistance table")
-    sr = SupportResistance(
-        config.DB_PATH,
-        params["data_source"],
-        params["cluster_count"])
-
+    sr = SupportResistance(config.DB_PATH)
     sr.set_data_source(params["data_source"])
     sr.set_working_table_name(f"tbl_{params['data_source']}_"
                               f"Support_Resistance")
@@ -107,10 +104,10 @@ def build_pinescript(config: Config):
     pinescript.build_pinescript(pinescript.source_table_name)
 
 
-def build_trend(config: Config):
+def build_trend(config: Config, trends: dict):
     print("Building trend indicator")
 
-    trend = Trend(config.DB_PATH)
+    trend = Trend(config.DB_PATH, trends)
     trend.set_data_source(params["data_source"])
     trend.set_output_folder("trends")
     trend.set_source_table_name("tbl_trend_params")
@@ -152,7 +149,7 @@ async def build_price_proximity(config: Config, eod_data_service: EODData):
                 f"tbl_{params['data_source']}_"
                 f"{instrument}_"
                 f"{timeframe}")
-            pp.append_price_atr()
+            await pp.append_price_atr()
             pp.calculate_price_proximity()
 
     if params["to_csv"]:
@@ -266,13 +263,14 @@ if __name__ == "__main__":
     eod_data_service = EODData(config.EOD_URL, config.EOD_API_KEY)
     params = config.EOD_MnTrd_PARAMS
     candle_patterns = config.Candle_Patterns
+    trends = config.Trends
 
     start_time = time.time()
 
     build_fractal_cluster(config)
     build_support_resistance(config)
     build_pinescript(config)
-    build_trend(config)
+    build_trend(config, trends)
     asyncio.run(build_price_proximity(config, eod_data_service))
     build_rsi(config)
     build_macd_price_cd(config)
