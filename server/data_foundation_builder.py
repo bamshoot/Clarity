@@ -6,7 +6,7 @@ import talib as ta
 import json
 from services.eod_data import EODData
 from config.config import Config
-# import asyncio
+import asyncio
 
 
 class DataFoundationBuilder:
@@ -595,39 +595,23 @@ symbol = syminfo.ticker
                         f"""Overall Rank = {row[11]}")\n""")
 
 
-class TrendIndicatorBuilder:
-    def __init__(self, db_path: str, data_source: str):
-        self.db_path = db_path
-        self.con = duckdb.connect(self.db_path)
-        self.data_source = data_source
-        self.instrument_name = None
-        self.timeframe = None
-        self.source_table_name = None
-        self.table_name = (f"tbl_{self.data_source}_Trends")
-        self._reset_trends_table()
+class TrendIndicatorBuilder(DataFoundationBuilder):
+    def __init__(self, db_path: str):
+        super().__init__(db_path)
+        self.params_table_name = "tbl_trend_params"
 
-    def __del__(self):
-        if hasattr(self, 'con'):
-            self.con.close()
-
-    def _get_table_from_db(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name}")
-
-    def _reset_trends_table(self):
-        self._drop_table(self.table_name)
-        self._drop_table("tbl_trend_params")
+    def reset_trends_table(self):
+        self.drop_table(self.params_table_name)
+        self.drop_table(self.working_table_name)
         self._create_trend_params_table_from_json()
         self._create_trends_table()
-
-    def _drop_table(self, table_name: str):
-        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
 
     def _create_trend_params_table_from_json(self):
         with open("./config/settings/trends.json", "r") as f:
             trend_params = json.load(f)
 
-        self.con.sql("""
-            CREATE TABLE tbl_trend_params
+        self.con.sql(f"""
+            CREATE TABLE {self.params_table_name}
             (
                 trend_id VARCHAR,
                 major_trend_slope_type VARCHAR,
@@ -647,7 +631,7 @@ class TrendIndicatorBuilder:
 
         for trend_id, trend_params in trend_params.items():
             self.con.sql(f"""
-                INSERT INTO tbl_trend_params
+                INSERT INTO {self.params_table_name}
                 VALUES ('{trend_id}',
                         '{trend_params['major_trend_slope_type']}',
                         '{trend_params['trend_slope_type']}',
@@ -665,7 +649,7 @@ class TrendIndicatorBuilder:
 
     def _create_trends_table(self):
         self.con.sql(f"""
-            CREATE TABLE {self.table_name}
+            CREATE TABLE {self.working_table_name}
             (
                 instrument_name VARCHAR,
                 timeframe VARCHAR,
@@ -688,16 +672,8 @@ class TrendIndicatorBuilder:
             )
         """)
 
-    def set_instrument_name(self, instrument_name: str):
-        self.instrument_name = instrument_name
-
-    def set_timeframe(self, timeframe: str):
-        self.timeframe = timeframe
-
-    def set_source_table_name(self):
-        self.source_table_name = (f"tbl_{self.data_source}_"
-                                  f"{self.instrument_name}_"
-                                  f"{self.timeframe}")
+    def set_working_table_name(self, working_table_name: str):
+        self.working_table_name = working_table_name
 
     def _append_instrument_trends(self,
                                   trend_id,
@@ -713,7 +689,7 @@ class TrendIndicatorBuilder:
                 FROM tbl_trend_params
                 WHERE trend_id = '{trend_id}'
             )
-            INSERT INTO {self.table_name}
+            INSERT INTO {self.working_table_name}
             SELECT '{self.instrument_name}' as instrument_name,
                    '{self.timeframe}' as timeframe,
                    '{trend_id}' as trend_id,
@@ -725,14 +701,6 @@ class TrendIndicatorBuilder:
             FROM trend_params
         """)
 
-    def get_table(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name}")
-
-    def to_csv(self, table_name: str):
-        self.con.sql(f"""
-            SELECT * FROM {table_name} ORDER BY instrument_name, timeframe
-        """).write_csv(f"./outputs/trends/{table_name}.csv")
-
     def generate_trends(self):
 
         run_length = 9
@@ -742,7 +710,7 @@ class TrendIndicatorBuilder:
         trend_threshold = 5
         major_trend_threshold = 5
 
-        data = self._get_table_from_db(self.source_table_name).fetchnumpy()
+        data = self.get_table_from_db(self.source_table_name).fetchnumpy()
 
         close_prices = data['close']
         high_prices = data['high']
@@ -2046,41 +2014,48 @@ start_time = time.time()
 
 # pinescript_builder.build_pinescript(pinescript_builder.source_table_name)
 
-print("Building trend indicator")
+# print("Building trend indicator")
 
-trend_indicator_builder = TrendIndicatorBuilder("./database/clarity.db", "EOD")
+# trend_indicator_builder = TrendIndicatorBuilder("./database/clarity.db")
+# trend_indicator_builder.set_data_source(params["data_source"])
+# trend_indicator_builder.set_output_folder("trends")
+# trend_indicator_builder.set_source_table_name("tbl_trend_params")
+# trend_indicator_builder.set_working_table_name(f"tbl_{params['data_source']}_Trends")
+# trend_indicator_builder.reset_trends_table()
 
-for instrument in params["instruments"]:
-    for timeframe in params["timeframes"]:
-        trend_indicator_builder.set_instrument_name(instrument)
-        trend_indicator_builder.set_timeframe(timeframe)
-        trend_indicator_builder.set_source_table_name()
-        trend_indicator_builder.generate_trends()
+# for instrument in params["instruments"]:
+#     for timeframe in params["timeframes"]:
+#         trend_indicator_builder.set_instrument_name(instrument)
+#         trend_indicator_builder.set_timeframe(timeframe)
+#         trend_indicator_builder.set_source_table_name(f"tbl_{params['data_source']}_"
+#                                                       f"{instrument}_"
+#                                                       f"{timeframe}")
+#         trend_indicator_builder.generate_trends()
 
-if params["to_csv"]:
-    trend_indicator_builder.to_csv(trend_indicator_builder.table_name)
+# if params["to_csv"]:
+#     trend_indicator_builder.to_csv(trend_indicator_builder.working_table_name)
 
 print("Building price proximity")
 
 
-# async def process_all_instruments():
-#     price_proximity_builder = PriceProximityBuilder("./database/clarity.db", "EOD")
+async def process_all_instruments():
+    price_proximity_builder = PriceProximityBuilder("./database/clarity.db", "EOD")
 
-#     for instrument in params["instruments"]:
-#         for timeframe in params["timeframes"]:
-#             print(f"Building {instrument} {timeframe}")
-#             price_proximity_builder.set_instrument_name(instrument)
-#             price_proximity_builder.set_exchange("FOREX")
-#             price_proximity_builder.set_timeframe(timeframe)
-#             price_proximity_builder.set_source_table_name()
-#             await price_proximity_builder.append_price_atr()
-#             price_proximity_builder.calculate_price_proximity()
+    for instrument in params["instruments"]:
+        for timeframe in params["timeframes"]:
+            print(f"Building {instrument} {timeframe}")
+            price_proximity_builder.set_instrument_name(instrument)
+            price_proximity_builder.set_exchange("FOREX")
+            price_proximity_builder.set_timeframe(timeframe)
+            price_proximity_builder.set_source_table_name()
+            await price_proximity_builder.append_price_atr()
+            price_proximity_builder.calculate_price_proximity()
 
-#     if params["to_csv"]:
-#         price_proximity_builder.to_csv(price_proximity_builder.table_name)
+    if params["to_csv"]:
+        price_proximity_builder.to_csv(price_proximity_builder.table_name)
 
-# # Replace the loop with:
-# asyncio.run(process_all_instruments())
+# Replace the loop with:
+asyncio.run(process_all_instruments())
 
 # print("Building RSI ranks")
 
