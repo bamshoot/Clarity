@@ -1,25 +1,28 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import main_router, eod_router
+from .routers import main_router, eod_router
 import uvicorn
-from config.config import Config
-
-from controllers.chrono import EODDataCollectionChrono
+from .config.config import Config
+from .controllers.chrono import EODDataCollectionChrono
 from contextlib import asynccontextmanager
-from services.eod_data import EODData
-from database.db import DB
+from .services.eod_data import EODData
+from .database.db import DB
 
 config = Config()
-
-eod_data_service = EODData(config.EOD_URL, config.EOD_API_KEY)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.db = DB()
+    app.state.db_connection = app.state.db.get_connection()
+
+    eod_data_service = EODData(
+        config.EOD_URL, config.EOD_API_KEY, db_connection=app.state.db_connection
+    )
 
     app.state.data_collection_chrono = EODDataCollectionChrono(
-        eod_data_service, 300, 3, app.state.db
+        eod_data_service, max_concurrent_requests=3, db=app.state.db,
+        schedule_hour=1, schedule_minute=30
     )
 
     await app.state.data_collection_chrono.start()
@@ -27,11 +30,9 @@ async def lifespan(app: FastAPI):
 
     try:
         yield
-
     finally:
-        app.state.db.close()
         await app.state.data_collection_chrono.stop(timeout=10)
-
+        app.state.db.close()
 
 app = FastAPI(lifespan=lifespan)
 

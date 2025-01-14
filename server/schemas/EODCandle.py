@@ -25,8 +25,10 @@ class EODCandle(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         if self.datetime_ is None and self.date_ is not None:
-            self.datetime_ = datetime.combine(self.date_, datetime.min.time(),
-                                              tzinfo=timezone.utc)
+            self.datetime_ = datetime.combine(
+                self.date_,
+                datetime.min.time().replace(tzinfo=timezone.utc)
+            )
         elif self.datetime_ is None and self.timestamp is not None:
             self.datetime_ = datetime.fromtimestamp(self.timestamp,
                                                     tz=timezone.utc)

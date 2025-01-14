@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
-from services.eod_data import EODData
-from utils.handlers import response_handler
+from ..services.eod_data import EODData
+from ..utils.handlers import response_handler
 
 router = APIRouter(tags=["EOD API"])
 

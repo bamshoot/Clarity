@@ -1,14 +1,13 @@
 import httpx
-import duckdb
 
 
 class EODData:
 
-    def __init__(self, base_url, api_key):
+    def __init__(self, base_url: str, api_key: str, db_connection=None):
         self.client = httpx.AsyncClient()
         self.base_url = base_url
         self.api_key = api_key
-        self.con = duckdb.connect("./database/clarity.db")
+        self.con = db_connection
 
     async def __aenter__(self):
         return self

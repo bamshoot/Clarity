@@ -1,30 +1,90 @@
 import asyncio
 import pandas as pd
-from utils.logger import Logger
-from config.config import Config
-from database.db import DB
-from schemas.EODCandle import EODCandle
+from ..utils.logger import Logger
+from ..config.config import Config
+from ..database.db import DB
+from ..schemas.EODCandle import EODCandle
+import datetime
 
 config = Config()
 
 
 class Chrono:
-    def __init__(self, name: str, interval: int = 10, db: DB = None):
+    def __init__(
+        self,
+        name: str,
+        db: DB = None,
+        interval: int = None,
+        schedule_hour: int = None,
+        schedule_minute: int = None,
+    ):
         """
-        Asynchronous Chrono class for periodic tasks.
+        Asynchronous Chrono class for periodic or scheduled tasks.
 
-        :param name: Name of the Chrono instance.
-        :param interval: Time interval between executions in seconds.
+        Args:
+            name: Name of the Chrono instance
+            db: Database instance
+            interval: Time interval between executions in seconds (for periodic tasks)
+            schedule_hour: Hour to run task (UTC, 0-23)
+            schedule_minute: Minute to run task (0-59)
         """
         self.name = name
-        self.interval = interval
         self.db = db
+        self.interval = interval
+        self.schedule_hour = schedule_hour
+        self.schedule_minute = schedule_minute
         self.logger = Logger(self.name, mode="a")
         self._stop_event = asyncio.Event()
         self._task = None
 
+        if self.interval and (schedule_hour is not None or schedule_minute is not None):
+            raise ValueError("Cannot specify both interval and schedule time")
+        if (schedule_hour is not None) != (schedule_minute is not None):
+            raise ValueError("Must specify both hour and minute for scheduled tasks")
+
     async def _run(self):
         """Asynchronous loop that performs the periodic task."""
+        if self.interval:
+            await self._run_interval()
+        else:
+            await self._run_scheduled()
+
+    async def _run_scheduled(self):
+        self.logger.logger.info(
+            f"{self.name} _run started, scheduled daily at "
+            f"{self.schedule_hour:02d}:{self.schedule_minute:02d} UTC."
+        )
+        while not self._stop_event.is_set():
+            now = datetime.datetime.now(datetime.timezone.utc)
+
+            target = now.replace(
+                hour=self.schedule_hour,
+                minute=self.schedule_minute,
+                second=0,
+                microsecond=0
+            )
+
+            if now >= target:
+                await self._execute_task()
+                target += datetime.timedelta(days=1)
+
+            sleep_secs = (target - now).total_seconds()
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=sleep_secs)
+            except asyncio.TimeoutError:
+                pass
+
+            if self._stop_event.is_set():
+                break
+
+            self.logger.logger.debug(f"{self.name} executing daily scheduled task.")
+            try:
+                await self._execute_task()
+            except Exception as e:
+                self.logger.logger.error(f"Error during task: {e}")
+
+    async def _run_interval(self):
+        """Run task at fixed intervals."""
         self.logger.logger.info(
             f"{self.name} _run started with interval {self.interval} seconds."
         )
@@ -94,16 +154,30 @@ class Chrono:
 
 class EODDataCollectionChrono(Chrono):
     def __init__(
-        self, data_service, interval: int, max_concurrent_requests: int, db: DB
+        self,
+        data_service,
+        max_concurrent_requests: int,
+        db: DB,
+        schedule_hour: int = 1,
+        schedule_minute: int = 30
     ):
         """
         Asynchronous DataCollectionChrono for collecting EOD data.
 
-        :param data_service: Service to fetch candle data.
-        :param interval: Time interval between data collection cycles in seconds.
-        :param max_concurrent_requests: Maximum number of concurrent HTTP requests.
+        Args:
+            data_service: Service to fetch candle data
+            max_concurrent_requests: Maximum number of concurrent HTTP requests
+            db: Database instance
+            check_interval: How often to check schedule in seconds
+            schedule_hour: Hour to run task (UTC, 0-23)
+            schedule_minute: Minute to run task (0-59)
         """
-        super().__init__(name="data_collection_chrono", interval=interval, db=db)
+        super().__init__(
+            name="data_collection_chrono",
+            schedule_hour=schedule_hour,
+            schedule_minute=schedule_minute,
+            db=db,
+        )
         self.data_service = data_service
         self.instruments = config.EOD_INSTRUMENTS["cross_rates"]
         self.periods = config.EOD_INSTRUMENTS["periods"]
@@ -140,22 +214,22 @@ class EODDataCollectionChrono(Chrono):
         df = pd.DataFrame([candle.__dict__ for candle in candles])
         df = df.rename(columns={"datetime_": "datetime", "date_": "date"})
 
-        with self.db.get_connection() as con:
-            con.register("df_temp", df)
+        con = self.db.get_connection()
+        con.register("df_temp", df)
 
-            con.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS {self.prefix}_{instrument}_{period}
-                AS SELECT * FROM df_temp
-                """
-            )
+        con.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.prefix}_{instrument}_{period}
+            AS SELECT * FROM df_temp
+            """
+        )
 
-            con.execute(
-                f"""CREATE INDEX IF NOT EXISTS idx_timestamp
-                     ON {self.prefix}_{instrument}_{period} (timestamp)"""
-            )
+        con.execute(
+            f"""CREATE INDEX IF NOT EXISTS idx_timestamp
+                    ON {self.prefix}_{instrument}_{period} (timestamp)"""
+        )
 
-            con.unregister("df_temp")
+        con.unregister("df_temp")
 
     async def _partial_candle_insert(self, instrument: str, period: str):
         db_from = await self.data_service.get_latest_candle_in_db(
@@ -176,23 +250,23 @@ class EODDataCollectionChrono(Chrono):
         new_rows = len(df)
 
         if new_rows > 0:
-            with self.db.get_connection() as con:
-                con.register("df_temp", df)
-                con.execute(f"""
-                    INSERT INTO {self.prefix}_{instrument}_{period}
-                    SELECT *
-                    FROM df_temp
-                    WHERE timestamp NOT IN (
-                        SELECT timestamp
-                        FROM {self.prefix}_{instrument}_{period}
-                    )
-                """)
-
-                con.unregister("df_temp")
-
-                self.logger.logger.info(
-                    f"Rows added to {self.prefix}_{instrument}_{period}: {new_rows}"
+            con = self.db.get_connection()
+            con.register("df_temp", df)
+            con.execute(f"""
+                INSERT INTO {self.prefix}_{instrument}_{period}
+                SELECT *
+                FROM df_temp
+                WHERE timestamp NOT IN (
+                    SELECT timestamp
+                    FROM {self.prefix}_{instrument}_{period}
                 )
+            """)
+
+            con.unregister("df_temp")
+
+            self.logger.logger.info(
+                f"Rows added to {self.prefix}_{instrument}_{period}: {new_rows}"
+            )
         else:
             self.logger.logger.info(
                 f"No new rows to add to {self.prefix}_{instrument}_{period}"
@@ -215,3 +289,8 @@ class EODDataCollectionChrono(Chrono):
 
             except Exception as e:
                 self.logger.logger.error(f"Error processing {table_name}: {str(e)}")
+
+        self.logger.logger.info(f"Task {self.name} executed successfully")
+        self.logger.logger.info(
+            f"Next run: {self.schedule_hour:02d}:{self.schedule_minute:02d} UTC"
+        )

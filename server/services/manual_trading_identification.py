@@ -11,11 +11,11 @@ from indicators.SupportResistance import SupportResistance
 from indicators.Pinescript import Pinescript
 from indicators.PriceProximity import PriceProximity
 import asyncio
+from utils.logger import Logger
 
 
 def build_fractal_cluster(config: Config):
-    print("Building data foundation")
-    print(config.DB_PATH)
+    logger.logger.info("Starting - Fractal/Cluster")
     fc = FractalCluster(
         config.DB_PATH,
         params["max_bars"],
@@ -41,7 +41,7 @@ def build_fractal_cluster(config: Config):
 
                 fc.set_working_table_name(working_table_name)
 
-                print(f"Building {working_table_name}")
+                logger.logger.info(f"Building - Fractal/Cluster - {working_table_name}")
 
                 fc.reset_table()
                 fc.set_instrument_name(instrument)
@@ -64,9 +64,11 @@ def build_fractal_cluster(config: Config):
                 if params["to_csv"]:
                     fc.to_csv(working_table_name)
 
+    logger.logger.info("Finished - Fractal/Cluster")
+
 
 def build_support_resistance(config: Config):
-    print("Building support resistance table")
+    logger.logger.info("Starting - Support Resistance")
     sr = SupportResistance(config.DB_PATH)
     sr.set_data_source(params["data_source"])
     sr.set_working_table_name(f"tbl_{params['data_source']}_"
@@ -82,6 +84,8 @@ def build_support_resistance(config: Config):
                                  f"f2_"
                                  f"k{params['cluster_count']}")
 
+            logger.logger.info(f"Building - Support Resistance - {source_table_name}")
+
             sr.set_source_table_name(source_table_name)
             sr.set_instrument_name(instrument)
             sr.set_timeframe(timeframe)
@@ -93,9 +97,11 @@ def build_support_resistance(config: Config):
     if params["to_csv"]:
         sr.to_csv(sr.working_table_name)
 
+    logger.logger.info("Finished - Support Resistance")
+
 
 def build_pinescript(config: Config):
-    print("Building pinescript")
+    logger.logger.info("Starting - Pinescript")
     pinescript = Pinescript(config.DB_PATH)
     pinescript.set_data_source(params["data_source"])
     pinescript.set_output_folder("pinescript")
@@ -103,10 +109,11 @@ def build_pinescript(config: Config):
                                      f"Support_Resistance")
     pinescript.build_pinescript(pinescript.source_table_name)
 
+    logger.logger.info("Finished - Pinescript")
+
 
 def build_trend(config: Config, trends: dict):
-    print("Building trend indicator")
-
+    logger.logger.info("Starting - Trend")
     trend = Trend(config.DB_PATH, trends)
     trend.set_data_source(params["data_source"])
     trend.set_output_folder("trends")
@@ -121,14 +128,17 @@ def build_trend(config: Config, trends: dict):
             trend.set_source_table_name(f"tbl_{params['data_source']}_"
                                         f"{instrument}_"
                                         f"{timeframe}")
+            logger.logger.info(f"Building - Trend - {trend.source_table_name}")
             trend.generate_trends()
 
     if params["to_csv"]:
         trend.to_csv(trend.working_table_name)
 
+    logger.logger.info("Finished - Trend")
+
 
 async def build_price_proximity(config: Config, eod_data_service: EODData):
-    print("Building price proximity")
+    logger.logger.info("Starting - Price Proximity")
     pp = PriceProximity(config.DB_PATH)
     pp.set_output_folder("price_proximity")
     pp.set_data_source(params["data_source"])
@@ -141,7 +151,7 @@ async def build_price_proximity(config: Config, eod_data_service: EODData):
 
     for instrument in params["instruments"]:
         for timeframe in params["timeframes"]:
-            print(f"Building {instrument} {timeframe}")
+            logger.logger.info(f"Building - Price Proximity - {instrument} {timeframe}")
             pp.set_exchange("FOREX")
             pp.set_instrument_name(instrument)
             pp.set_timeframe(timeframe)
@@ -155,16 +165,18 @@ async def build_price_proximity(config: Config, eod_data_service: EODData):
     if params["to_csv"]:
         pp.to_csv(pp.working_table_name)
 
+    logger.logger.info("Finished - Price Proximity")
+
 
 def build_rsi(config: Config):
-    print("Building RSI ranks")
+    logger.logger.info("Starting - RSI")
     rsi = RSI(config.DB_PATH)
     rsi.reset_rsi_ranks_table()
     rsi.set_output_folder("rsi")
 
     for instrument in params["instruments"]:
         for timeframe in params["timeframes"]:
-            print(f"Building {instrument} {timeframe}")
+            logger.logger.info(f"Building - RSI - {instrument} {timeframe}")
             rsi.set_instrument_name(instrument)
             rsi.set_timeframe(timeframe)
             rsi.set_source_table_name(f"tbl_{params['data_source']}_"
@@ -180,9 +192,11 @@ def build_rsi(config: Config):
         rsi.to_csv(rsi.pair_table_name)
         rsi.to_csv(rsi.currency_table_name)
 
+    logger.logger.info("Finished - RSI")
+
 
 def build_macd_price_cd(config: Config):
-    print("Building MACD Price Convergence Divergence")
+    logger.logger.info("Starting - MACD Price Convergence Divergence")
     macdpcd = MACDPriceCD(config.DB_PATH)
     macdpcd.set_output_folder("macd_price_cd")
     macdpcd.set_data_source(params["data_source"])
@@ -192,6 +206,8 @@ def build_macd_price_cd(config: Config):
 
     for instrument in params["instruments"]:
         for timeframe in params["timeframes"]:
+            logger.logger.info(f"Building - MACD Price Convergence Divergence - "
+                               f"{instrument} {timeframe}")
             macdpcd.set_instrument_name(instrument)
             macdpcd.set_timeframe(timeframe)
             macdpcd.set_source_table_name(f"tbl_{params['data_source']}_"
@@ -204,7 +220,7 @@ def build_macd_price_cd(config: Config):
 
 
 def build_pattern_cd(config: Config):
-    print("Building pattern convergence divergence")
+    logger.logger.info("Starting - Pattern Convergence Divergence")
     pcd = PatternCD(config.DB_PATH)
     pcd.set_output_folder("pattern_cd")
     pcd.set_data_source(params["data_source"])
@@ -215,6 +231,8 @@ def build_pattern_cd(config: Config):
     for instrument in params["instruments"]:
         for timeframe in params["timeframes"]:
             for fractal_period in params["fractal_period"][timeframe]:
+                logger.logger.info(f"Building - Pattern Convergence Divergence - "
+                                   f"{instrument} {timeframe} {fractal_period}")
                 pcd.set_instrument_name(instrument)
                 pcd.set_timeframe(timeframe)
                 pcd.set_fractal_period(fractal_period)
@@ -231,17 +249,18 @@ def build_pattern_cd(config: Config):
     if params["to_csv"]:
         pcd.to_csv(pcd.working_table_name)
 
+    logger.logger.info("Finished - Pattern Convergence Divergence")
+
 
 def build_candle_pattern(config: Config):
-    print("Building candle patterns")
+    logger.logger.info("Starting - Candle Patterns")
     candle_pattern = CandlePattern(config.DB_PATH, candle_patterns)
     candle_pattern.set_data_source(params["data_source"])
     candle_pattern.set_output_folder("candle_patterns")
 
     for instrument in params["instruments"]:
         for timeframe in params["timeframes"]:
-            print(f"Building {instrument} {timeframe} candle patterns")
-
+            logger.logger.info(f"Building - Candle Patterns - {instrument} {timeframe}")
             candle_pattern.set_instrument_name(instrument)
             candle_pattern.set_timeframe(timeframe)
             candle_pattern.set_source_table_name(f"tbl_{params['data_source']}_"
@@ -256,6 +275,8 @@ def build_candle_pattern(config: Config):
             if params["to_csv"]:
                 candle_pattern.to_csv(candle_pattern.working_table_name)
 
+    logger.logger.info("Finished - Candle Patterns")
+
 
 if __name__ == "__main__":
 
@@ -265,8 +286,11 @@ if __name__ == "__main__":
     candle_patterns = config.Candle_Patterns
     trends = config.Trends
 
+    logger = Logger("manual_trading_identification")
+
     start_time = time.time()
 
+    logger.logger.info("Starting - Manual Trading Identification")
     build_fractal_cluster(config)
     build_support_resistance(config)
     build_pinescript(config)
@@ -277,5 +301,6 @@ if __name__ == "__main__":
     build_pattern_cd(config)
     build_candle_pattern(config)
 
+    logger.logger.info("Finished - Manual Trading Identification")
     end_time = time.time()
-    print(f"Time taken: {end_time - start_time} seconds")
+    logger.logger.info(f"Time taken: {end_time - start_time} seconds")
