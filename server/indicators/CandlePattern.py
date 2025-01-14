@@ -6,10 +6,27 @@ class CandlePattern(DataFoundationBuilder):
     def __init__(self, db_path: str, candle_patterns: dict):
         super().__init__(db_path)
         self.candle_patterns = candle_patterns
+        self.candle_pattern_params_table_name = None
         self.last_n_rows_table_name = None
+        self.last_n_aggregated_table_name = None
+
+    def set_candle_pattern_params_table_name(
+            self, candle_pattern_params_table_name: str):
+        self.candle_pattern_params_table_name = candle_pattern_params_table_name
 
     def set_last_n_rows_table_name(self, last_n_rows_table_name: str):
         self.last_n_rows_table_name = last_n_rows_table_name
+
+    def set_last_n_aggregated_table_name(self, last_n_aggregated_table_name: str):
+        self.last_n_aggregated_table_name = last_n_aggregated_table_name
+
+    def reset_candle_pattern_params_table(self):
+        self.drop_table(self.candle_pattern_params_table_name)
+        self._create_candle_pattern_params_table()
+
+    def reset_last_n_aggregated_table(self):
+        self.drop_table(self.last_n_aggregated_table_name)
+        self._create_last_n_aggregated_table()
 
     def reset_candle_pattern_table(self):
         self._create_candle_pattern_table()
@@ -17,6 +34,29 @@ class CandlePattern(DataFoundationBuilder):
     def reset_candle_pattern_last_n_rows(self):
         self.drop_table(self.last_n_rows_table_name)
         self._create_candle_pattern_last_n_rows()
+
+    def _create_candle_pattern_params_table(self):
+        self.con.sql(f"""
+            CREATE TABLE IF NOT EXISTS {self.candle_pattern_params_table_name} (
+                pattern_code VARCHAR,
+                name VARCHAR,
+                type VARCHAR,
+                direction VARCHAR,
+                func VARCHAR
+            )
+        """)
+
+        for pattern_code, pattern_info in self.candle_patterns.items():
+            self.con.sql(f"""
+                INSERT INTO {self.candle_pattern_params_table_name}
+                VALUES (
+                    '{pattern_code}',
+                    '{pattern_info["name"]}',
+                    '{pattern_info["type"]}',
+                    '{pattern_info["direction"]}',
+                    '{pattern_info["func"]}'
+                )
+            """)
 
     def _create_candle_pattern_last_n_rows(self):
         self.con.sql(f"""
@@ -35,7 +75,8 @@ class CandlePattern(DataFoundationBuilder):
                 "7" INTEGER,
                 "8" INTEGER,
                 "9" INTEGER,
-                "10" INTEGER
+                "10" INTEGER,
+                "sum" INTEGER
             )
         """)
 
@@ -93,6 +134,17 @@ class CandlePattern(DataFoundationBuilder):
                 ALTER TABLE temp_insert
                 ADD COLUMN IF NOT EXISTS {pattern} INTEGER
             """)
+
+    def _create_last_n_aggregated_table(self):
+        self.con.sql(f"""
+            CREATE TABLE IF NOT EXISTS {self.last_n_aggregated_table_name} (
+                instrument_name VARCHAR,
+                timeframe VARCHAR,
+                reversal INTEGER,
+                indecisive INTEGER,
+                continuation INTEGER
+            )
+        """)
 
     def generate_candle_patterns(self):
         self._create_temp_table_timestamps_in_source_not_in_candle_pattern()
@@ -400,26 +452,49 @@ class CandlePattern(DataFoundationBuilder):
 
             last_n_rows AS (
                 SELECT
-                    pattern_name AS pattern_code,
-                    NULL AS name,
-                    NULL AS type,
-                    NULL AS direction,
-                    NULL AS func,
-                    MAX(CASE WHEN idx = 1  THEN pattern_value END) AS "1",
-                    MAX(CASE WHEN idx = 2  THEN pattern_value END) AS "2",
-                    MAX(CASE WHEN idx = 3  THEN pattern_value END) AS "3",
-                    MAX(CASE WHEN idx = 4  THEN pattern_value END) AS "4",
-                    MAX(CASE WHEN idx = 5  THEN pattern_value END) AS "5",
-                    MAX(CASE WHEN idx = 6  THEN pattern_value END) AS "6",
-                    MAX(CASE WHEN idx = 7  THEN pattern_value END) AS "7",
-                    MAX(CASE WHEN idx = 8  THEN pattern_value END) AS "8",
-                    MAX(CASE WHEN idx = 9  THEN pattern_value END) AS "9",
-                    MAX(CASE WHEN idx = 10 THEN pattern_value END) AS "10"
-                FROM unpivoted
-                GROUP BY pattern_name
-                ORDER BY pattern_name
+                    u.pattern_name AS pattern_code,
+                    p.name,
+                    p.type,
+                    p.direction,
+                    p.func,
+                    MAX(CASE WHEN u.idx = 1  THEN u.pattern_value END) AS "1",
+                    MAX(CASE WHEN u.idx = 2  THEN u.pattern_value END) AS "2",
+                    MAX(CASE WHEN u.idx = 3  THEN u.pattern_value END) AS "3",
+                    MAX(CASE WHEN u.idx = 4  THEN u.pattern_value END) AS "4",
+                    MAX(CASE WHEN u.idx = 5  THEN u.pattern_value END) AS "5",
+                    MAX(CASE WHEN u.idx = 6  THEN u.pattern_value END) AS "6",
+                    MAX(CASE WHEN u.idx = 7  THEN u.pattern_value END) AS "7",
+                    MAX(CASE WHEN u.idx = 8  THEN u.pattern_value END) AS "8",
+                    MAX(CASE WHEN u.idx = 9  THEN u.pattern_value END) AS "9",
+                    MAX(CASE WHEN u.idx = 10 THEN u.pattern_value END) AS "10",
+                    COALESCE(SUM(CASE
+                        WHEN u.idx BETWEEN 1 AND 10 THEN u.pattern_value
+                    END), 0) AS "sum"
+                FROM unpivoted u
+                LEFT JOIN tbl_candle_patterns_params p
+                ON u.pattern_name = p.pattern_code
+                GROUP BY u.pattern_name, p.name, p.type, p.direction, p.func
+                ORDER BY u.pattern_name
             )
 
             INSERT INTO {self.last_n_rows_table_name}
             SELECT * FROM last_n_rows
         """)
+
+    def generate_last_n_aggregated_data(self):
+        self.con.sql(f"""
+            INSERT INTO {self.last_n_aggregated_table_name}
+            SELECT
+                '{self.instrument_name}',
+                '{self.timeframe}',
+                SUM(CASE WHEN type = 'reversal'
+                         THEN "sum"
+                         ELSE 0 END) as reversal,
+                SUM(CASE WHEN type = 'indecisive'
+                         THEN "sum"
+                         ELSE 0 END) as indecisive,
+                SUM(CASE WHEN type = 'continuation'
+                         THEN "sum"
+                         ELSE 0 END) as continuation
+            FROM {self.last_n_rows_table_name}
+            """)

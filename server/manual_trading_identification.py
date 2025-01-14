@@ -10,9 +10,7 @@ from indicators.Trend import Trend
 from indicators.SupportResistance import SupportResistance
 from indicators.Pinescript import Pinescript
 from indicators.PriceProximity import PriceProximity
-import asyncio
 from utils.logger import Logger
-import duckdb
 
 
 def build_fractal_cluster(config: Config):
@@ -253,44 +251,17 @@ def build_pattern_cd(config: Config):
     logger.logger.info("Finished - Pattern Convergence Divergence")
 
 
-def load_candle_patterns_params_into_db(config: Config, candle_patterns: dict):
-    logger.logger.info("Loading - Candle Patterns params into DB")
-    con = duckdb.connect(config.DB_PATH)
-    con.sql("""
-        DROP TABLE IF EXISTS tbl_candle_patterns_params;
-        CREATE TABLE tbl_candle_patterns_params (
-            pattern_code VARCHAR,
-            name VARCHAR,
-            type VARCHAR,
-            direction VARCHAR,
-            func VARCHAR
-        )
-    """)
-
-    for pattern_code, pattern_info in candle_patterns.items():
-        con.sql(f"""
-            INSERT INTO tbl_candle_patterns_params
-            VALUES (
-                '{pattern_code}',
-                '{pattern_info["name"]}',
-                '{pattern_info["type"]}',
-                '{pattern_info["direction"]}',
-                '{pattern_info["func"]}'
-            );
-        """)
-
-    print(con.sql("SELECT * FROM tbl_candle_patterns_params"))
-
-    con.close()
-
-    logger.logger.info("Finished - Candle Patterns params into DB")
-
-
 def build_candle_pattern(config: Config):
     logger.logger.info("Starting - Candle Patterns")
     candle_pattern = CandlePattern(config.DB_PATH, candle_patterns)
     candle_pattern.set_data_source(params["data_source"])
     candle_pattern.set_output_folder("candle_patterns")
+    candle_pattern.set_candle_pattern_params_table_name(
+        "tbl_candle_patterns_params")
+    candle_pattern.reset_candle_pattern_params_table()
+    candle_pattern.set_last_n_aggregated_table_name(
+        "tbl_candle_patterns_last_n_aggregated")
+    candle_pattern.reset_last_n_aggregated_table()
 
     for instrument in params["instruments"]:
         for timeframe in params["timeframes"]:
@@ -308,13 +279,18 @@ def build_candle_pattern(config: Config):
                                                       f"{instrument}_"
                                                       f"{timeframe}_"
                                                       f"last_n_rows")
-            # candle_pattern.reset_candle_pattern_table()
-            # candle_pattern.generate_candle_patterns()
+            candle_pattern.reset_candle_pattern_table()
+            candle_pattern.generate_candle_patterns()
             candle_pattern.reset_candle_pattern_last_n_rows()
             candle_pattern.generate_candle_pattern_last_n_rows(10)
+            candle_pattern.generate_last_n_aggregated_data()
+
             if params["to_csv"]:
-                # candle_pattern.to_csv(candle_pattern.working_table_name)
+                candle_pattern.to_csv(candle_pattern.working_table_name)
                 candle_pattern.to_csv(candle_pattern.last_n_rows_table_name)
+
+    if params["to_csv"]:
+        candle_pattern.to_csv(candle_pattern.last_n_aggregated_table_name)
 
     logger.logger.info("Finished - Candle Patterns")
 
@@ -341,7 +317,6 @@ if __name__ == "__main__":
     # build_macd_price_cd(config)
     # build_pattern_cd(config)
     build_candle_pattern(config)
-    # load_candle_patterns_params_into_db(config, candle_patterns)
 
     logger.logger.info("Finished - Manual Trading Identification")
     end_time = time.time()
