@@ -11,6 +11,7 @@ from indicators.SupportResistance import SupportResistance
 from indicators.Pinescript import Pinescript
 from indicators.PriceProximity import PriceProximity
 from utils.logger import Logger
+import asyncio
 
 
 def build_fractal_cluster(config: Config):
@@ -170,6 +171,9 @@ async def build_price_proximity(config: Config, eod_data_service: EODData):
 def build_rsi(config: Config):
     logger.logger.info("Starting - RSI")
     rsi = RSI(config.DB_PATH)
+    rsi.set_data_source(params["data_source"])
+    rsi.set_pair_table_name(f"tbl_{params['data_source']}_pair_RSI_Rank")
+    rsi.set_currency_table_name(f"tbl_{params['data_source']}_currency_RSI_Rank")
     rsi.reset_rsi_ranks_table()
     rsi.set_output_folder("rsi")
 
@@ -308,15 +312,15 @@ if __name__ == "__main__":
     start_time = time.time()
 
     logger.logger.info("Starting - Manual Trading Identification")
-    # build_fractal_cluster(config)
-    # build_support_resistance(config)
-    # build_pinescript(config)
-    # build_trend(config, trends)
-    # asyncio.run(build_price_proximity(config, eod_data_service))
-    # build_rsi(config)
-    # build_macd_price_cd(config)
-    # build_pattern_cd(config)
+    build_fractal_cluster(config)
+    build_support_resistance(config)
+    build_trend(config, trends)
+    asyncio.run(build_price_proximity(config, eod_data_service))
+    build_rsi(config)
+    build_macd_price_cd(config)
+    build_pattern_cd(config)
     build_candle_pattern(config)
+    build_pinescript(config)
 
     logger.logger.info("Finished - Manual Trading Identification")
     end_time = time.time()

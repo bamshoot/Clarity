@@ -6,8 +6,8 @@ class RSI(DataFoundationBuilder):
     def __init__(self, db_path: str):
         super().__init__(db_path)
         self.source_table_name = None
-        self.pair_table_name = (f"tbl_{self.data_source}_pair_RSI_Rank")
-        self.currency_table_name = (f"tbl_{self.data_source}_currency_RSI_Rank")
+        self.pair_table_name = None
+        self.currency_table_name = None
         self.currency_rsi_values = {
             'AUD': {'1h': [], 'd': [], 'w': [], 'm': []},
             'NZD': {'1h': [], 'd': [], 'w': [], 'm': []},
@@ -28,6 +28,12 @@ class RSI(DataFoundationBuilder):
             'EUR': {'1h': None, 'd': None, 'w': None, 'm': None},
             'USD': {'1h': None, 'd': None, 'w': None, 'm': None}
         }
+
+    def set_pair_table_name(self, pair_table_name: str):
+        self.pair_table_name = pair_table_name
+
+    def set_currency_table_name(self, currency_table_name: str):
+        self.currency_table_name = currency_table_name
 
     def reset_rsi_ranks_table(self):
         self.drop_table(self.pair_table_name)
@@ -53,9 +59,15 @@ class RSI(DataFoundationBuilder):
                 pair_rsi DOUBLE,
                 base_rsi DOUBLE,
                 quote_rsi DOUBLE,
+                pair_rsi_diff DOUBLE,
+                base_rsi_diff DOUBLE,
+                quote_rsi_diff DOUBLE,
                 pair_timeframe_rank INTEGER,
                 base_timeframe_rank INTEGER,
-                quote_timeframe_rank INTEGER
+                quote_timeframe_rank INTEGER,
+                pair_status VARCHAR,
+                base_status VARCHAR,
+                quote_status VARCHAR
             )
         """)
 
@@ -66,7 +78,9 @@ class RSI(DataFoundationBuilder):
                 currency VARCHAR,
                 timeframe VARCHAR,
                 rsi DOUBLE,
-                rank INTEGER
+                rsi_diff DOUBLE,
+                rank INTEGER,
+                status VARCHAR
             )
         """)
 
@@ -98,6 +112,16 @@ class RSI(DataFoundationBuilder):
     def generate_pair_timeframe_rank(self):
         self.con.sql(f"""
             UPDATE {self.pair_table_name} t1
+            SET pair_rsi_diff = (
+                SELECT ABS(pair_rsi - 50)
+                FROM {self.pair_table_name}
+                WHERE instrument_name = t1.instrument_name
+                    AND timeframe = t1.timeframe
+            )
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.pair_table_name} t1
             SET pair_timeframe_rank = (
                 SELECT rank
                 FROM (
@@ -106,12 +130,26 @@ class RSI(DataFoundationBuilder):
                         timeframe,
                         DENSE_RANK() OVER (
                             PARTITION BY timeframe
-                            ORDER BY pair_rsi DESC
+                            ORDER BY pair_rsi_diff DESC
                         ) as rank
                     FROM {self.pair_table_name}
                 ) rankings
                 WHERE rankings.instrument_name = t1.instrument_name
                 AND rankings.timeframe = t1.timeframe
+            )
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.pair_table_name} t1
+            SET pair_status = (
+                SELECT CASE
+                    WHEN pair_rsi_diff >= 10 AND pair_rsi < 50 THEN 'buy'
+                    WHEN pair_rsi_diff >= 10 AND pair_rsi > 50 THEN 'sell'
+                    ELSE 'neutral'
+                END
+                FROM {self.pair_table_name}
+                WHERE instrument_name = t1.instrument_name
+                    AND timeframe = t1.timeframe
             )
         """)
 
@@ -135,17 +173,38 @@ class RSI(DataFoundationBuilder):
 
         self.con.sql(f"""
             UPDATE {self.currency_table_name} t1
+            SET rsi_diff = (
+                SELECT ABS(rsi - 50)
+                FROM {self.currency_table_name}
+                WHERE currency = t1.currency
+                    AND timeframe = t1.timeframe
+            )
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.currency_table_name} t1
             SET rank = (
                 SELECT rank
                 FROM (
                     SELECT currency,
                            timeframe,
                            DENSE_RANK() OVER (
-                               PARTITION BY timeframe ORDER BY rsi DESC) as rank
+                               PARTITION BY timeframe ORDER BY rsi_diff DESC) as rank
                     FROM {self.currency_table_name}
                 ) rankings
                 WHERE rankings.currency = t1.currency
                     AND rankings.timeframe = t1.timeframe
+            )
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.currency_table_name} t1
+            SET status = (
+                SELECT CASE
+                    WHEN rsi_diff >= 5 AND rsi < 50 THEN 'buy'
+                    WHEN rsi_diff >= 5 AND rsi > 50 THEN 'sell'
+                    ELSE 'neutral'
+                END
             )
         """)
 
@@ -168,6 +227,22 @@ class RSI(DataFoundationBuilder):
         """)
         self.con.sql(f"""
             UPDATE {self.pair_table_name} t1
+            SET base_rsi_diff = (
+                SELECT rsi_diff
+                FROM {self.currency_table_name}
+                WHERE currency = t1.base_currency AND timeframe = t1.timeframe
+            )
+        """)
+        self.con.sql(f"""
+            UPDATE {self.pair_table_name} t1
+            SET quote_rsi_diff = (
+                SELECT rsi_diff
+                FROM {self.currency_table_name}
+                WHERE currency = t1.quote_currency AND timeframe = t1.timeframe
+            )
+        """)
+        self.con.sql(f"""
+            UPDATE {self.pair_table_name} t1
             SET base_timeframe_rank = (
                 SELECT rank
                 FROM {self.currency_table_name}
@@ -180,5 +255,21 @@ class RSI(DataFoundationBuilder):
                 SELECT rank
                 FROM {self.currency_table_name}
                 WHERE currency = t1.quote_currency AND timeframe = t1.timeframe
+            )
+        """)
+        self.con.sql(f"""
+            UPDATE {self.pair_table_name} t1
+            SET quote_status = (
+                SELECT status
+                FROM {self.currency_table_name}
+                WHERE currency = t1.quote_currency AND timeframe = t1.timeframe
+            )
+        """)
+        self.con.sql(f"""
+            UPDATE {self.pair_table_name} t1
+            SET base_status = (
+                SELECT status
+                FROM {self.currency_table_name}
+                WHERE currency = t1.base_currency AND timeframe = t1.timeframe
             )
         """)
