@@ -159,7 +159,8 @@ class EODDataCollectionChrono(Chrono):
         max_concurrent_requests: int,
         db: DB,
         schedule_hour: int = 1,
-        schedule_minute: int = 30
+        schedule_minute: int = 30,
+        manual_trading=None
     ):
         """
         Asynchronous DataCollectionChrono for collecting EOD data.
@@ -179,6 +180,7 @@ class EODDataCollectionChrono(Chrono):
             db=db,
         )
         self.data_service = data_service
+        self.manual_trading = manual_trading
         self.instruments = config.EOD_INSTRUMENTS["cross_rates"]
         self.periods = config.EOD_INSTRUMENTS["periods"]
         self.prefix = "tbl_EOD"
@@ -294,3 +296,8 @@ class EODDataCollectionChrono(Chrono):
         self.logger.logger.info(
             f"Next run: {self.schedule_hour:02d}:{self.schedule_minute:02d} UTC"
         )
+
+        if self.manual_trading:
+            await self.manual_trading.run_analysis()
+        else:
+            self.logger.logger.warning("ManualTradingIdentification not initialized")

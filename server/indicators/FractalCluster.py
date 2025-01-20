@@ -1,15 +1,16 @@
 import kmeans1d
+
 from .DataFoundationBuilder import DataFoundationBuilder
 
 
 class FractalCluster(DataFoundationBuilder):
     def __init__(self,
-                 db_path: str,
+                 db_connection,
                  max_bars: int,
                  cluster_count: int,
                  outlier_threshold: float,
                  candle_price_point: str):
-        super().__init__(db_path)
+        super().__init__(db_connection)
         self.fractal_period = None
         self.max_bars = max_bars
         self.cluster_count = cluster_count

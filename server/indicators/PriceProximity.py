@@ -1,10 +1,11 @@
-from .DataFoundationBuilder import DataFoundationBuilder
 import talib as ta
+
+from .DataFoundationBuilder import DataFoundationBuilder
 
 
 class PriceProximity(DataFoundationBuilder):
-    def __init__(self, db_path: str):
-        super().__init__(db_path)
+    def __init__(self, db_connection):
+        super().__init__(db_connection)
         self.exchange = None
         self.eod_data_service = None
 

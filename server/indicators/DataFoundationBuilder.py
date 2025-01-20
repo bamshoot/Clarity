@@ -1,11 +1,15 @@
-
-import duckdb
-
-
 class DataFoundationBuilder:
-    def __init__(self, db_path: str):
-        self.db_path = db_path
-        self.con = duckdb.connect(self.db_path)
+    def __init__(self, db):
+        if hasattr(db, 'get_connection'):
+            # If passed a DB instance
+            self.con = db.get_connection()
+        else:
+            # If passed a direct connection
+            self.con = db
+
+        if self.con is None:
+            raise ValueError("Failed to initialize database connection")
+
         self.data_source = None
         self.instrument_name = None
         self.timeframe = None
@@ -13,15 +17,11 @@ class DataFoundationBuilder:
         self.working_table_name = None
         self.output_folder = None
 
-    def __del__(self):
-        if hasattr(self, 'con'):
-            self.con.close()
-
     def get_table_from_db(self, table_name: str):
         return self.con.sql(f"SELECT * FROM {table_name}")
 
     def drop_table(self, table_name: str):
-        self.con.sql(f"DROP TABLE IF EXISTS {table_name}")
+        self.con.execute(f"DROP TABLE IF EXISTS {table_name}")
 
     def set_data_source(self, data_source: str):
         self.data_source = data_source

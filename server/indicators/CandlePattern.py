@@ -1,10 +1,11 @@
-from .DataFoundationBuilder import DataFoundationBuilder
 import talib as ta
+
+from .DataFoundationBuilder import DataFoundationBuilder
 
 
 class CandlePattern(DataFoundationBuilder):
-    def __init__(self, db_path: str, candle_patterns: dict):
-        super().__init__(db_path)
+    def __init__(self, db_connection, candle_patterns: dict):
+        super().__init__(db_connection)
         self.candle_patterns = candle_patterns
         self.candle_pattern_params_table_name = None
         self.last_n_rows_table_name = None

@@ -1,11 +1,12 @@
-from .DataFoundationBuilder import DataFoundationBuilder
 import talib as ta
+
+from .DataFoundationBuilder import DataFoundationBuilder
 
 
 class PatternCD(DataFoundationBuilder):
 
-    def __init__(self, db_path: str):
-        super().__init__(db_path)
+    def __init__(self, db_connection):
+        super().__init__(db_connection)
         self.fractal_period = None
         self.cluster_count = None
         self.atr_threshold = None

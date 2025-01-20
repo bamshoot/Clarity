@@ -1,10 +1,11 @@
-from .DataFoundationBuilder import DataFoundationBuilder
 import talib as ta
+
+from .DataFoundationBuilder import DataFoundationBuilder
 
 
 class Trend(DataFoundationBuilder):
-    def __init__(self, db_path: str, trends: dict):
-        super().__init__(db_path)
+    def __init__(self, db_connection, trends: dict):
+        super().__init__(db_connection)
         self.params_table_name = "tbl_trend_params"
         self.trend_params = trends
 

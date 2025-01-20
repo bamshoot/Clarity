@@ -1,11 +1,12 @@
-from .DataFoundationBuilder import DataFoundationBuilder
 import os
 import datetime
 
+from .DataFoundationBuilder import DataFoundationBuilder
+
 
 class Pinescript(DataFoundationBuilder):
-    def __init__(self, db_path: str):
-        super().__init__(db_path)
+    def __init__(self, db_connection):
+        super().__init__(db_connection)
 
     def _reset_pinescript_file(self):
         for file in os.listdir(f"./outputs/{self.output_folder}"):

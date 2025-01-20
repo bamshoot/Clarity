@@ -1,26 +1,30 @@
 import duckdb
-import pprint
+# import pprint
 
 
 class DB:
     _instance = None
     _connection = None
+    _db_path = None
 
-    def __new__(cls):
+    def __new__(cls, db_path=None):
         if cls._instance is None:
             cls._instance = super(DB, cls).__new__(cls)
+            cls._db_path = db_path
         return cls._instance
 
     def connect(self):
         if DB._connection is None:
-            DB._connection = duckdb.connect(
-                "/mnt/c/Users/jebwi/Dev/Clarity/database/clarity.db")
+            if not DB._db_path:
+                raise ValueError("Database path not provided")
+            DB._connection = duckdb.connect(DB._db_path, read_only=False)
 
     def execute(self, query: str):
         try:
             self.connect()
             return DB._connection.execute(query)
-        except Exception:
+        except Exception as e:
+            print(f"DB execution error: {e}")
             DB._connection = None
             self.connect()
             return DB._connection.execute(query)
@@ -29,14 +33,18 @@ class DB:
         try:
             self.connect()
             return DB._connection
-        except Exception:
+        except Exception as e:
+            print(f"DB connection error: {e}")
             DB._connection = None
             self.connect()
             return DB._connection
 
     def close(self):
         if DB._connection:
-            DB._connection.close()
+            try:
+                DB._connection.close()
+            except Exception as e:
+                print(f"DB close error: {e}")
             DB._connection = None
         DB._instance = None
 
@@ -85,7 +93,7 @@ def drop_table(db_path, table_name):
         con.sql(f"DROP TABLE IF EXISTS {table_name}")
 
 
-pprint.pprint(list_tables("/mnt/c/Users/jebwi/Dev/Clarity/database/clarity.db"))
+# pprint.pprint(list_tables("/mnt/c/Users/jebwi/Dev/Clarity/database/clarity.db"))
 # drop_tables("./database/clarity.db")
 # drop_table("./database/clarity.db", "tbl_EOD_EURUSD_1h_f2_k10_temp")
 

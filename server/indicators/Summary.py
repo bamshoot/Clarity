@@ -2,8 +2,8 @@ from .DataFoundationBuilder import DataFoundationBuilder
 
 
 class Summary(DataFoundationBuilder):
-    def __init__(self, db_path: str):
-        super().__init__(db_path)
+    def __init__(self, db_connection):
+        super().__init__(db_connection)
 
     def create_summary_table(self):
         self.con.sql(f"""
