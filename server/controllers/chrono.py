@@ -292,12 +292,12 @@ class EODDataCollectionChrono(Chrono):
             except Exception as e:
                 self.logger.logger.error(f"Error processing {table_name}: {str(e)}")
 
-        self.logger.logger.info(f"Task {self.name} executed successfully")
-        self.logger.logger.info(
-            f"Next run: {self.schedule_hour:02d}:{self.schedule_minute:02d} UTC"
-        )
-
         if self.manual_trading:
             await self.manual_trading.run_analysis()
         else:
             self.logger.logger.warning("ManualTradingIdentification not initialized")
+
+        self.logger.logger.info(f"Task {self.name} executed successfully")
+        self.logger.logger.info(
+            f"Next run: {self.schedule_hour:02d}:{self.schedule_minute:02d} UTC"
+        )
