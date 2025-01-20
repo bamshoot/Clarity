@@ -10,6 +10,8 @@ from indicators.Trend import Trend
 from indicators.SupportResistance import SupportResistance
 from indicators.Pinescript import Pinescript
 from indicators.PriceProximity import PriceProximity
+from indicators.Summary import Summary
+from indicators.Watchlist import Watchlist
 from utils.logger import Logger
 import asyncio
 
@@ -264,7 +266,7 @@ def build_candle_pattern(config: Config):
         "tbl_candle_patterns_params")
     candle_pattern.reset_candle_pattern_params_table()
     candle_pattern.set_last_n_aggregated_table_name(
-        "tbl_candle_patterns_last_n_aggregated")
+        f"tbl_{params['data_source']}_candle_patterns_last_n_aggregated")
     candle_pattern.reset_last_n_aggregated_table()
 
     for instrument in params["instruments"]:
@@ -299,6 +301,30 @@ def build_candle_pattern(config: Config):
     logger.logger.info("Finished - Candle Patterns")
 
 
+def build_summary(config: Config):
+    logger.logger.info("Starting - Summary")
+    summary = Summary(config.DB_PATH)
+    summary.set_data_source(params["data_source"])
+    summary.set_output_folder("summary")
+    summary.set_working_table_name(f"tbl_{params['data_source']}_summary")
+    summary.drop_table(summary.working_table_name)
+    summary.create_summary_table()
+
+    if params["to_csv"]:
+        summary.to_csv(summary.working_table_name)
+
+    logger.logger.info("Finished - Summary")
+
+
+def build_watchlist(config: Config):
+    logger.logger.info("Starting - Watchlist")
+    watchlist = Watchlist(config.DB_PATH)
+    watchlist.set_source_table_name(f"tbl_{params['data_source']}_summary")
+    watchlist.build_watchlist()
+
+    logger.logger.info("Finished - Watchlist")
+
+
 if __name__ == "__main__":
 
     config = Config()
@@ -320,6 +346,8 @@ if __name__ == "__main__":
     build_macd_price_cd(config)
     build_pattern_cd(config)
     build_candle_pattern(config)
+    build_summary(config)
+    build_watchlist(config)
     build_pinescript(config)
 
     logger.logger.info("Finished - Manual Trading Identification")

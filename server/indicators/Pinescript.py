@@ -46,16 +46,16 @@ symbol = syminfo.ticker
 
             if row[1] == "1h":
                 show_timeframe = "show_1h"
-                color = "color.green"
+                color = "color.new(color.green, 70)"
             elif row[1] == "d":
                 show_timeframe = "show_d"
-                color = "color.blue"
+                color = "color.new(color.blue, 70)"
             elif row[1] == "w":
                 show_timeframe = "show_w"
-                color = "color.orange"
+                color = "color.new(color.orange, 70)"
             elif row[1] == "m":
                 show_timeframe = "show_m"
-                color = "color.red"
+                color = "color.new(color.red, 70)"
 
             if abs(row[7]) < 2 or row[11] < 4:
                 show = "display = display.all"
@@ -68,7 +68,7 @@ symbol = syminfo.ticker
                 f.write(f"""plot({show_timeframe} and"""
                         f""" symbol == '{row[0]}'?{row[3]:.4f}:na,"""
                         f""" "Proximity Rank = {row[7]}","""
-                        f""" color = {color},"""
+                        f""" color = {color}, linewidth = 4,"""
                         f""" editable = true, {show})\n"""
                         f"""if (bar_index == last_bar_index) and show_label"""
                         f""" and {show_timeframe}\n"""

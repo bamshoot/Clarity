@@ -1,5 +1,5 @@
 import duckdb
-# import pprint
+import pprint
 
 
 class DB:
@@ -13,7 +13,8 @@ class DB:
 
     def connect(self):
         if DB._connection is None:
-            DB._connection = duckdb.connect("./database/clarity.db")
+            DB._connection = duckdb.connect(
+                "/mnt/c/Users/jebwi/Dev/Clarity/database/clarity.db")
 
     def execute(self, query: str):
         try:
@@ -84,7 +85,7 @@ def drop_table(db_path, table_name):
         con.sql(f"DROP TABLE IF EXISTS {table_name}")
 
 
-# pprint.pprint(list_tables("./database/clarity.db"))
+pprint.pprint(list_tables("/mnt/c/Users/jebwi/Dev/Clarity/database/clarity.db"))
 # drop_tables("./database/clarity.db")
 # drop_table("./database/clarity.db", "tbl_EOD_EURUSD_1h_f2_k10_temp")
 
