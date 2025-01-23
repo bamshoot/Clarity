@@ -76,6 +76,8 @@ class EODData:
         self, prefix: str, ticker: str, exchange: str, interval: str
     ):
         table_name = f"{prefix}_{ticker}_{interval}"
-        field = "date" if interval in ["d", "w", "m"] else "timestamp"
-        query = f"SELECT MAX({field}) FROM {table_name}"
+        if interval in ["d", "w", "m"]:
+            query = f"SELECT MAX(CAST(date AS DATE)) FROM {table_name}"
+        else:
+            query = f"SELECT MAX(timestamp) FROM {table_name}"
         return self.con.sql(query).fetchone()[0]

@@ -1,6 +1,7 @@
 import time
 from .eod_data import EODData
 from ..config.config import Config
+from ..indicators.SourcePrep import SourcePrep
 from ..indicators.FractalCluster import FractalCluster
 from ..indicators.CandlePattern import CandlePattern
 from ..indicators.PatternCD import PatternCD
@@ -30,6 +31,29 @@ class ManualTradingIdentification:
         self.candle_patterns = config.Candle_Patterns
         self.logger = Logger("manual_trading_identification")
         self.db = db_connection
+
+    def build_source_prep(self):
+        self.logger.logger.info("Starting - Source Prep")
+        src_prep = SourcePrep(self.db)
+        src_prep.set_candle_price_point("close")
+        for instrument in self.params["instruments"]:
+            for timeframe in self.params["timeframes"]:
+                self.logger.logger.info(f"Building - Source Prep - "
+                                        f"{instrument} {timeframe}")
+                src_prep.set_source_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}")
+                src_prep.add_columns()
+                src_prep.generate_last_candle_price()
+                src_prep.generate_index_data()
+                src_prep.generate_ema(20)
+                src_prep.generate_ema(50)
+                src_prep.generate_atr(14)
+                src_prep.generate_rsi(14)
+                src_prep.generate_macd(12, 26, 9)
+
+        self.logger.logger.info("Finished - Source Prep")
 
     def build_fractal_cluster(self):
         self.logger.logger.info("Starting - Fractal/Cluster")
@@ -61,23 +85,21 @@ class ManualTradingIdentification:
                     self.logger.logger.info(f"Building - Fractal/Cluster - "
                                             f"{working_table_name}")
 
-                    fc.reset_table()
-                    fc.set_instrument_name(instrument)
-                    fc.set_timeframe(timeframe)
-                    fc.set_fractal_period(fractal_period)
-                    fc.set_output_folder("fractals")
-                    fc.set_threshold()
-                    fc.generate_input_data()
-                    fc.generate_last_candle_price()
-                    fc.generate_index_data()
-                    fc.generate_fractal_data()
-                    fc.generate_cluster_data()
-                    fc.generate_cent_dist()
-                    fc.remove_outliers()
-                    fc.generate_cent_dist_lst_candle()
-                    fc.generate_cent_count()
-                    fc.generate_score()
-                    fc.generate_rank()
+                    fc.reset_table() # Both
+                    fc.set_instrument_name(instrument) # Both
+                    fc.set_timeframe(timeframe) # Both
+                    fc.set_fractal_period(fractal_period) # Both
+                    fc.set_output_folder("fractals") # Both
+                    fc.set_threshold() #cluster
+                    fc.generate_input_data() # Both f fractal k cluster o outlier
+                    fc.generate_fractal_data() # fractal
+                    fc.generate_cluster_data() # cluster
+                    fc.generate_cent_dist() # cluster
+                    fc.remove_outliers() # cluster
+                    fc.generate_cent_dist_lst_candle() # cluster
+                    fc.generate_cent_count() # cluster
+                    fc.generate_score() # cluster
+                    fc.generate_rank() # cluster
 
                     if self.params["to_csv"]:
                         fc.to_csv(working_table_name)
@@ -347,6 +369,7 @@ class ManualTradingIdentification:
             start_time = time.time()
             self.logger.logger.info("Starting - Manual Trading Identification")
 
+            self.build_source_prep()
             self.build_fractal_cluster()
             self.build_support_resistance()
             self.build_trend()

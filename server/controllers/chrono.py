@@ -233,6 +233,41 @@ class EODDataCollectionChrono(Chrono):
 
         con.unregister("df_temp")
 
+    async def drop_columns(self, instrument: str, period: str):
+        con = self.db.get_connection()
+        con.sql(f"""
+            ALTER TABLE {self.prefix}_{instrument}_{period}
+            DROP COLUMN IF EXISTS lstCandlePrice
+        """)
+        con.sql(f"""
+            ALTER TABLE {self.prefix}_{instrument}_{period}
+            DROP COLUMN IF EXISTS distLstCandle
+        """)
+        con.sql(f"""
+            ALTER TABLE {self.prefix}_{instrument}_{period}
+            DROP COLUMN IF EXISTS idx
+        """)
+        con.sql(f"""
+            ALTER TABLE {self.prefix}_{instrument}_{period}
+            DROP COLUMN IF EXISTS ema20
+        """)
+        con.sql(f"""
+            ALTER TABLE {self.prefix}_{instrument}_{period}
+            DROP COLUMN IF EXISTS ema50
+        """)
+        con.sql(f"""
+            ALTER TABLE {self.prefix}_{instrument}_{period}
+            DROP COLUMN IF EXISTS atr14
+        """)
+        con.sql(f"""
+            ALTER TABLE {self.prefix}_{instrument}_{period}
+            DROP COLUMN IF EXISTS rsi14
+        """)
+        con.sql(f"""
+            ALTER TABLE {self.prefix}_{instrument}_{period}
+            DROP COLUMN IF EXISTS macd_12_26_9
+        """)
+
     async def _partial_candle_insert(self, instrument: str, period: str):
         db_from = await self.data_service.get_latest_candle_in_db(
             self.prefix, instrument, "FOREX", period
@@ -287,6 +322,7 @@ class EODDataCollectionChrono(Chrono):
                     await self._full_candle_insert(instrument, period)
 
                 else:
+                    await self.drop_columns(instrument, period)
                     await self._partial_candle_insert(instrument, period)
 
             except Exception as e:

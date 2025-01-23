@@ -4,6 +4,12 @@ from .DataFoundationBuilder import DataFoundationBuilder
 class Summary(DataFoundationBuilder):
     def __init__(self, db_connection):
         super().__init__(db_connection)
+        self.candle_pattern_table_name = "tbl_EOD_candle_patterns_last_n_aggregated"
+        self.support_resistance_table_name = "tbl_EOD_Support_Resistance"
+        self.trend_table_name = "tbl_EOD_Trends"
+        self.rsi_pair_table_name = "tbl_EOD_pair_RSI_Rank"
+        self.price_proximity_table_name = "tbl_EOD_PriceProximity"
+        self.macd_price_cd_table_name = "tbl_EOD_macd_price_cd"
 
     def create_summary_table(self):
         self.con.sql(f"""
@@ -14,7 +20,7 @@ class Summary(DataFoundationBuilder):
                     instrument_name,
                     reversal
                 FROM
-                    clarity.main.tbl_EOD_candle_patterns_last_n_aggregated
+                    {self.candle_pattern_table_name}
                 WHERE
                     timeframe = '1h'
             ),
@@ -24,7 +30,7 @@ class Summary(DataFoundationBuilder):
                     trend_slope_type,
                     bias
                 FROM
-                    clarity.main.tbl_EOD_Trends
+                    {self.trend_table_name}
                 WHERE
                     timeframe = 'd'
             ),
@@ -34,7 +40,7 @@ class Summary(DataFoundationBuilder):
                     pair_timeframe_rank,
                     pair_status
                 FROM
-                    clarity.main.tbl_EOD_pair_RSI_Rank
+                    {self.rsi_pair_table_name}
                 WHERE
                     timeframe = 'd'
             ),
@@ -45,7 +51,7 @@ class Summary(DataFoundationBuilder):
                     centDistLstCandleRank,
                     ROUND(proximity, 4) AS proximity
                 FROM
-                    clarity.main.tbl_EOD_PriceProximity
+                    {self.price_proximity_table_name}
                 WHERE
                     timeframe = 'd' AND centDistLstCandleRank = 1
             ),
@@ -56,7 +62,7 @@ class Summary(DataFoundationBuilder):
                     centDistLstCandleRank,
                     ROUND(proximity, 4) as proximity
                 FROM
-                    clarity.main.tbl_EOD_PriceProximity
+                    {self.price_proximity_table_name}
                 WHERE
                     timeframe = 'd' AND centDistLstCandleRank = -1
             ),
@@ -66,7 +72,7 @@ class Summary(DataFoundationBuilder):
                     ROUND(macd_price_cd, 2) AS macd_price_cd,
                     status
                 FROM
-                    clarity.main.tbl_EOD_macd_price_cd
+                    {self.macd_price_cd_table_name}
                 WHERE
                     timeframe = '1h'
             )

@@ -1,10 +1,8 @@
 class DataFoundationBuilder:
     def __init__(self, db):
         if hasattr(db, 'get_connection'):
-            # If passed a DB instance
             self.con = db.get_connection()
         else:
-            # If passed a direct connection
             self.con = db
 
         if self.con is None:

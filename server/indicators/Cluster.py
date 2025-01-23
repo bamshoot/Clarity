@@ -18,9 +18,6 @@ class FractalCluster(DataFoundationBuilder):
         self.candle_price_point = candle_price_point
         self.threshold = None
 
-    def get_table_from_db(self, table_name: str):
-        return self.con.sql(f"SELECT * FROM {table_name} ORDER BY datetime")
-
     def create_fractal_table(self):
         self.con.sql(f"""
                 CREATE TABLE {self.working_table_name} AS
@@ -55,6 +52,18 @@ class FractalCluster(DataFoundationBuilder):
         self.con.sql(f"""
             ALTER TABLE {self.working_table_name}
             ADD COLUMN o DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN lstCandlePrice DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN distLstCandle DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN idx INTEGER
         """)
         self.con.sql(f"""
             ALTER TABLE {self.working_table_name}
@@ -139,6 +148,45 @@ class FractalCluster(DataFoundationBuilder):
             UPDATE {self.working_table_name}
             SET o = {self.outlier_threshold}
         """)
+
+    def generate_last_candle_price(self):
+        if self.candle_price_point == "close":
+            self.con.sql(f"""
+                UPDATE {self.working_table_name}
+                SET lstCandlePrice = (SELECT close FROM {self.working_table_name}
+                                         ORDER BY date DESC LIMIT 1),
+                    distLstCandle = abs((SELECT close FROM {self.working_table_name}
+                                            ORDER BY date DESC LIMIT 1) - close)
+            """)
+        elif self.candle_price_point == "high_low":
+            self.con.sql(f"""
+                UPDATE {self.working_table_name}
+                SET lstCandlePrice = (SELECT (high + low) / 2
+                                      FROM {self.working_table_name}
+                                      ORDER BY date DESC LIMIT 1),
+                    distLstCandle = abs((SELECT (high + low) / 2
+                                         FROM {self.working_table_name}
+                                         ORDER BY date DESC LIMIT 1) -
+                                         (high + low) / 2)
+            """)
+
+    def generate_index_data(self):
+
+        self.con.sql(f"""
+            CREATE TABLE {self.working_table_name}_temp AS
+            SELECT *,
+                   row_number() OVER (ORDER BY date) - 1 AS idx_temp
+            FROM {self.working_table_name}
+        """)
+
+        self.con.sql(f"""
+            UPDATE {self.working_table_name}
+            SET idx = {self.working_table_name}_temp.idx_temp,
+            FROM {self.working_table_name}_temp
+            WHERE {self.working_table_name}.date = {self.working_table_name}_temp.date
+        """)
+
+        self.drop_table(f"{self.working_table_name}_temp")
 
     def generate_fractal_data(self):
 
@@ -232,7 +280,11 @@ class FractalCluster(DataFoundationBuilder):
 
     def generate_cluster_data(self):
 
-        df = self.get_table_from_db(self.working_table_name).to_df()
+        df = self.con.sql(f"""
+            SELECT *
+            FROM {self.working_table_name}
+            ORDER BY datetime
+        """).to_df()
 
         clusters, centroids = kmeans1d.cluster(df[self.candle_price_point],
                                                self.cluster_count)
