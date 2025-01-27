@@ -3,7 +3,7 @@ import kmeans1d
 from .DataFoundationBuilder import DataFoundationBuilder
 
 
-class FractalCluster(DataFoundationBuilder):
+class Cluster(DataFoundationBuilder):
     def __init__(self,
                  db_connection,
                  max_bars: int,
@@ -11,39 +11,44 @@ class FractalCluster(DataFoundationBuilder):
                  outlier_threshold: float,
                  candle_price_point: str):
         super().__init__(db_connection)
+        self.sr_table_name = None
         self.fractal_period = None
         self.max_bars = max_bars
+        self.window_position = None
+        self.window_end = None
+        self.date = None
+        self.datetime = None
+        self.window_start = None
         self.cluster_count = cluster_count
         self.outlier_threshold = outlier_threshold
         self.candle_price_point = candle_price_point
         self.threshold = None
 
-    def create_fractal_table(self):
+    def create_sr_table(self):
         self.con.sql(f"""
-                CREATE TABLE {self.working_table_name} AS
-                SELECT *
-                FROM {self.source_table_name}
-            """)
-
-        self.con.sql(f"""
-            CREATE TABLE {self.working_table_name}_temp AS
-            SELECT * FROM {self.working_table_name}
-            ORDER BY datetime DESC
-            LIMIT {self.max_bars}
+            CREATE TABLE {self.working_table_name}
+            (
+                instrument_name VARCHAR,
+                timeframe VARCHAR,
+                clust INTEGER,
+                cent DOUBLE,
+                centDistMean DOUBLE,
+                centCount DOUBLE,
+                centDistLstCandle DOUBLE,
+                centDistLstCandleRank DOUBLE,
+                centDistMeanRank DOUBLE,
+                centCountRank DOUBLE,
+                score DOUBLE,
+                overallRank DOUBLE
+            )
         """)
 
-        self.drop_table(self.working_table_name)
-
+    def create_cluster_table(self):
         self.con.sql(f"""
             CREATE TABLE {self.working_table_name} AS
-            SELECT * FROM {self.working_table_name}_temp
-        """)
-
-        self.drop_table(f"{self.working_table_name}_temp")
-
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN f INTEGER
+            SELECT *
+            FROM {self.source_table_name}
+            ORDER BY datetime DESC
         """)
         self.con.sql(f"""
             ALTER TABLE {self.working_table_name}
@@ -52,26 +57,6 @@ class FractalCluster(DataFoundationBuilder):
         self.con.sql(f"""
             ALTER TABLE {self.working_table_name}
             ADD COLUMN o DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN lstCandlePrice DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN distLstCandle DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN idx INTEGER
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN uf BOOLEAN
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN lf BOOLEAN
         """)
         self.con.sql(f"""
             ALTER TABLE {self.working_table_name}
@@ -124,10 +109,57 @@ class FractalCluster(DataFoundationBuilder):
 
     def reset_table(self):
         self.drop_table(self.working_table_name)
-        self.create_fractal_table()
+        self.create_cluster_table()
+
+    def set_sr_table_name(self, sr_table_name: str):
+        self.sr_table_name = sr_table_name
 
     def set_fractal_period(self, fractal_period: int):
         self.fractal_period = fractal_period
+
+    def set_window_position(self, window_position: int):
+        self.window_position = window_position
+
+    def set_window_end(self):
+
+        self.window_end = self.con.sql(f"""
+            SELECT timestamp
+            FROM {self.working_table_name}
+            ORDER BY timestamp DESC
+            LIMIT 1 OFFSET {self.window_position - 1}
+        """).fetchone()[0]
+
+        self.date = self.con.sql(f"""
+            SELECT date
+            FROM {self.working_table_name}
+            ORDER BY timestamp DESC
+            LIMIT 1 OFFSET {self.window_position - 1}
+        """).fetchone()[0]
+
+        self.datetime = self.con.sql(f"""
+            SELECT datetime
+            FROM {self.working_table_name}
+            ORDER BY timestamp DESC
+            LIMIT 1 OFFSET {self.window_position - 1}
+        """).fetchone()[0]
+
+    def set_window_start(self):
+
+        table_length = self.con.sql(f"""
+            SELECT COUNT(*)
+            FROM {self.working_table_name}
+        """).fetchone()[0]
+
+        min_table_length_or_max_bars = min(table_length, self.max_bars)
+        print(min_table_length_or_max_bars)
+
+        self.window_start = self.con.sql(f"""
+            SELECT timestamp
+            FROM {self.working_table_name}
+            ORDER BY timestamp DESC
+            LIMIT 1
+            OFFSET {(self.window_position - 1) + (min_table_length_or_max_bars - 1)}
+        """).fetchone()[0]
 
     def set_threshold(self):
         self.threshold = self.con.sql(f"""
@@ -138,10 +170,6 @@ class FractalCluster(DataFoundationBuilder):
     def generate_input_data(self):
         self.con.sql(f"""
             UPDATE {self.working_table_name}
-            SET f = {self.fractal_period}
-        """)
-        self.con.sql(f"""
-            UPDATE {self.working_table_name}
             SET k = {self.cluster_count}
         """)
         self.con.sql(f"""
@@ -149,141 +177,14 @@ class FractalCluster(DataFoundationBuilder):
             SET o = {self.outlier_threshold}
         """)
 
-    def generate_last_candle_price(self):
-        if self.candle_price_point == "close":
-            self.con.sql(f"""
-                UPDATE {self.working_table_name}
-                SET lstCandlePrice = (SELECT close FROM {self.working_table_name}
-                                         ORDER BY date DESC LIMIT 1),
-                    distLstCandle = abs((SELECT close FROM {self.working_table_name}
-                                            ORDER BY date DESC LIMIT 1) - close)
-            """)
-        elif self.candle_price_point == "high_low":
-            self.con.sql(f"""
-                UPDATE {self.working_table_name}
-                SET lstCandlePrice = (SELECT (high + low) / 2
-                                      FROM {self.working_table_name}
-                                      ORDER BY date DESC LIMIT 1),
-                    distLstCandle = abs((SELECT (high + low) / 2
-                                         FROM {self.working_table_name}
-                                         ORDER BY date DESC LIMIT 1) -
-                                         (high + low) / 2)
-            """)
-
-    def generate_index_data(self):
-
-        self.con.sql(f"""
-            CREATE TABLE {self.working_table_name}_temp AS
-            SELECT *,
-                   row_number() OVER (ORDER BY date) - 1 AS idx_temp
-            FROM {self.working_table_name}
-        """)
-
-        self.con.sql(f"""
-            UPDATE {self.working_table_name}
-            SET idx = {self.working_table_name}_temp.idx_temp,
-            FROM {self.working_table_name}_temp
-            WHERE {self.working_table_name}.date = {self.working_table_name}_temp.date
-        """)
-
-        self.drop_table(f"{self.working_table_name}_temp")
-
-    def generate_fractal_data(self):
-
-        self.con.sql(f"""
-            CREATE TABLE {self.working_table_name}_temp AS
-            WITH fractals AS (
-                SELECT
-                    datetime,
-                    CASE
-                        WHEN current_high = window_max THEN true
-                        ELSE false
-                    END as uf,
-                    CASE
-                        WHEN current_low = window_min THEN true
-                        ELSE false
-                    END as lf
-                FROM (
-                    SELECT
-                        *,
-                        MAX(CASE
-                            WHEN '{self.candle_price_point}' =
-                                'high_low' THEN high
-                            ELSE close
-                        END) OVER (
-                            ORDER BY date
-                            ROWS BETWEEN {self.fractal_period}
-                                PRECEDING AND {self.fractal_period}
-                                FOLLOWING
-                        ) as window_max,
-                        MIN(CASE
-                            WHEN '{self.candle_price_point}' =
-                                'high_low' THEN low
-                            ELSE close
-                        END) OVER (
-                            ORDER BY date
-                            ROWS BETWEEN {self.fractal_period}
-                                PRECEDING AND {self.fractal_period}
-                                FOLLOWING
-                        ) as window_min,
-                        CASE
-                            WHEN '{self.candle_price_point}' =
-                                'high_low' THEN high
-                            ELSE close
-                        END as current_high,
-                        CASE
-                            WHEN '{self.candle_price_point}' =
-                                'high_low' THEN low
-                            ELSE close
-                        END as current_low
-                    FROM {self.working_table_name}
-                ) AS subq
-            )
-            SELECT
-                t.*,
-                f.uf AS uf_temp,
-                f.lf AS lf_temp
-            FROM {self.working_table_name} t
-            LEFT JOIN fractals f ON t.datetime = f.datetime
-            ORDER BY t.datetime;
-        """)
-
-        # print(self.con.sql(f"""
-        #     SELECT COUNT(*) FROM {self.working_table_name}_temp
-        # """).fetchone()[0])
-
-        self.con.sql(f"""
-            UPDATE {self.working_table_name} t
-            SET uf = temp.uf_temp,
-                lf = temp.lf_temp
-            FROM {self.working_table_name}_temp temp
-            WHERE t.datetime = temp.datetime
-        """)
-
-        self.drop_table(f"{self.working_table_name}_temp")
-
-        self.con.sql(f"""
-            CREATE TABLE {self.working_table_name}_temp AS
-            SELECT * FROM {self.working_table_name}
-            WHERE uf = true OR lf = true
-            ORDER BY idx
-        """)
-
-        self.drop_table(f"{self.working_table_name}")
-
-        self.con.sql(f"""
-            CREATE TABLE {self.working_table_name} AS
-            SELECT * FROM {self.working_table_name}_temp
-        """)
-
-        self.drop_table(f"{self.working_table_name}_temp")
-
     def generate_cluster_data(self):
 
         df = self.con.sql(f"""
             SELECT *
             FROM {self.working_table_name}
-            ORDER BY datetime
+            WHERE timestamp >= {self.window_start} AND timestamp <= {self.window_end}
+            ORDER BY timestamp ASC
+
         """).to_df()
 
         clusters, centroids = kmeans1d.cluster(df[self.candle_price_point],
@@ -412,4 +313,28 @@ class FractalCluster(DataFoundationBuilder):
         self.con.sql(f"""
             UPDATE {self.working_table_name}
             SET overallRank = (centDistMeanRank + centCountRank) / 2
+        """)
+
+    def select_data(self):
+        return self.con.sql(f"""
+            SELECT DISTINCT
+                    '{self.date}' as date,
+                    '{self.datetime}' as datetime,
+                    {self.window_end} as window_end,
+                    {self.window_start} as window_start,
+                    '{self.instrument_name}' as instrument_name,
+                    '{self.timeframe}' as timeframe,
+                    clust,
+                    cent,
+                    centDistMean,
+                    centCount,
+                    centDistLstCandle,
+                    centDistLstCandleRank,
+                    centDistMeanRank,
+                    centCountRank,
+                    score,
+                    overallRank
+                FROM {self.working_table_name}
+                WHERE ABS(centDistLstCandleRank) = 1
+
         """)

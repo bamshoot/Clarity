@@ -2,7 +2,8 @@ import time
 from .eod_data import EODData
 from ..config.config import Config
 from ..indicators.SourcePrep import SourcePrep
-from ..indicators.FractalCluster import FractalCluster
+from ..indicators.Fractal import Fractal
+from ..indicators.Cluster import Cluster
 from ..indicators.CandlePattern import CandlePattern
 from ..indicators.PatternCD import PatternCD
 from ..indicators.MACDPriceCD import MACDPriceCD
@@ -55,56 +56,89 @@ class ManualTradingIdentification:
 
         self.logger.logger.info("Finished - Source Prep")
 
-    def build_fractal_cluster(self):
-        self.logger.logger.info("Starting - Fractal/Cluster")
-        fc = FractalCluster(
-            self.db,
-            self.params["max_bars"],
-            self.params["cluster_count"],
-            self.params["outlier_threshold"],
-            self.params["candle_price_point"])
+    def build_fractal(self):
+        self.logger.logger.info("Starting - Fractal")
+        fractal = Fractal(self.db, self.params["candle_price_point"])
+
+        fractal.set_data_source(self.params["data_source"])
+        fractal.set_output_folder("fractals")
 
         for instrument in self.params["instruments"]:
             for timeframe in self.params["timeframes"]:
                 for fractal_period in self.params["fractal_period"][timeframe]:
+                    self.logger.logger.info(f"Building - Fractal - "
+                                            f"{instrument} {timeframe} "
+                                            f"{fractal_period}")
+                    fractal.set_instrument_name(instrument)
+                    fractal.set_timeframe(timeframe)
+                    fractal.set_fractal_period(fractal_period)
+                    fractal.set_source_table_name(
+                        f"tbl_{self.params['data_source']}_"
+                        f"{instrument}_"
+                        f"{timeframe}")
+                    fractal.set_working_table_name(
+                        f"tbl_{self.params['data_source']}_"
+                        f"{instrument}_"
+                        f"{timeframe}_"
+                        f"f{fractal_period}")
+                    fractal.reset_table()
+                    fractal.generate_input_data()
+                    fractal.generate_fractal_data()
 
-                    source_table_name = (f"tbl_{self.params['data_source']}_"
-                                         f"{instrument}_"
-                                         f"{timeframe}")
+        self.logger.logger.info("Finished - Fractal")
 
-                    fc.set_source_table_name(source_table_name)
+        if self.params["to_csv"]:
+            fractal.to_csv(fractal.working_table_name)
 
-                    working_table_name = (f"tbl_{self.params['data_source']}_"
-                                          f"{instrument}_"
-                                          f"{timeframe}_"
-                                          f"f{fractal_period}_"
-                                          f"k{self.params['cluster_count']}")
+    def build_cluster(self):
+        self.logger.logger.info("Starting - Cluster")
+        cluster = Cluster(self.db,
+                          300,
+                          self.params["cluster_count"],
+                          self.params["outlier_threshold"],
+                          self.params["candle_price_point"])
 
-                    fc.set_working_table_name(working_table_name)
+        cluster.set_data_source(self.params["data_source"])
+        cluster.set_output_folder("clusters")
 
-                    self.logger.logger.info(f"Building - Fractal/Cluster - "
-                                            f"{working_table_name}")
+        for instrument in self.params["instruments"]:
+            for timeframe in self.params["timeframes"]:
+                for fractal_period in self.params["fractal_period"][timeframe]:
+                    self.logger.logger.info(f"Building - Cluster - "
+                                            f"{instrument} {timeframe} "
+                                            f"{fractal_period}")
+                    cluster.set_instrument_name(instrument)
+                    cluster.set_timeframe(timeframe)
+                    cluster.set_fractal_period(fractal_period)
+                    cluster.set_source_table_name(
+                        f"tbl_{self.params['data_source']}_"
+                        f"{instrument}_"
+                        f"{timeframe}_"
+                        f"f{fractal_period}")
+                    cluster.set_working_table_name(
+                        f"tbl_{self.params['data_source']}_"
+                        f"{instrument}_"
+                        f"{timeframe}_"
+                        f"f{fractal_period}_"
+                        f"k{self.params['cluster_count']}")
+                    cluster.set_threshold()
+                    cluster.reset_table()
+                    cluster.set_window_position(1)
+                    cluster.set_window_end()
+                    cluster.set_window_start()
+                    cluster.generate_input_data()
+                    cluster.generate_cluster_data()
+                    cluster.generate_cent_dist()
+                    cluster.remove_outliers()
+                    cluster.generate_cent_dist_lst_candle()
+                    cluster.generate_cent_count()
+                    cluster.generate_score()
+                    cluster.generate_rank()
 
-                    fc.reset_table() # Both
-                    fc.set_instrument_name(instrument) # Both
-                    fc.set_timeframe(timeframe) # Both
-                    fc.set_fractal_period(fractal_period) # Both
-                    fc.set_output_folder("fractals") # Both
-                    fc.set_threshold() #cluster
-                    fc.generate_input_data() # Both f fractal k cluster o outlier
-                    fc.generate_fractal_data() # fractal
-                    fc.generate_cluster_data() # cluster
-                    fc.generate_cent_dist() # cluster
-                    fc.remove_outliers() # cluster
-                    fc.generate_cent_dist_lst_candle() # cluster
-                    fc.generate_cent_count() # cluster
-                    fc.generate_score() # cluster
-                    fc.generate_rank() # cluster
+        self.logger.logger.info("Finished - Cluster")
 
-                    if self.params["to_csv"]:
-                        fc.to_csv(working_table_name)
-
-        self.logger.logger.info("Finished - Fractal/Cluster")
+        if self.params["to_csv"]:
+            cluster.to_csv(cluster.working_table_name)
 
     def build_support_resistance(self):
         self.logger.logger.info("Starting - Support Resistance")
@@ -370,7 +404,8 @@ class ManualTradingIdentification:
             self.logger.logger.info("Starting - Manual Trading Identification")
 
             self.build_source_prep()
-            self.build_fractal_cluster()
+            self.build_fractal()
+            self.build_cluster()
             self.build_support_resistance()
             self.build_trend()
             await self.build_price_proximity()

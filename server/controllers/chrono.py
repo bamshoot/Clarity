@@ -312,21 +312,21 @@ class EODDataCollectionChrono(Chrono):
     async def _execute_task(self):
         self.logger.logger.info("Starting data collection task.")
 
-        for instrument, period in self.cross_rates_periods:
-            table_name = f"{self.prefix}_{instrument}_{period}"
-            try:
-                table_exists = self.db.table_exists(table_name)
+        # for instrument, period in self.cross_rates_periods:
+        #     table_name = f"{self.prefix}_{instrument}_{period}"
+        #     try:
+        #         table_exists = self.db.table_exists(table_name)
 
-                if not table_exists:
-                    self.logger.logger.info(f"Creating new table: {table_name}")
-                    await self._full_candle_insert(instrument, period)
+        #         if not table_exists:
+        #             self.logger.logger.info(f"Creating new table: {table_name}")
+        #             await self._full_candle_insert(instrument, period)
 
-                else:
-                    await self.drop_columns(instrument, period)
-                    await self._partial_candle_insert(instrument, period)
+        #         else:
+        #             await self.drop_columns(instrument, period)
+        #             await self._partial_candle_insert(instrument, period)
 
-            except Exception as e:
-                self.logger.logger.error(f"Error processing {table_name}: {str(e)}")
+        #     except Exception as e:
+        #         self.logger.logger.error(f"Error processing {table_name}: {str(e)}")
 
         if self.manual_trading:
             await self.manual_trading.run_analysis()
