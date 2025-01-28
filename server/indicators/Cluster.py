@@ -15,14 +15,19 @@ class Cluster(DataFoundationBuilder):
         self.fractal_period = None
         self.max_bars = max_bars
         self.window_position = None
-        self.window_end = None
+        self.timestamp = None
         self.date = None
         self.datetime = None
-        self.window_start = None
         self.cluster_count = cluster_count
         self.outlier_threshold = outlier_threshold
         self.candle_price_point = candle_price_point
         self.threshold = None
+        self.last_close = None
+        self.last_ema20 = None
+        self.last_ema50 = None
+        self.last_atr14 = None
+        self.last_rsi14 = None
+        self.last_macd_12_26_9 = None
 
     def create_sr_table(self):
         self.con.sql(f"""
@@ -46,9 +51,11 @@ class Cluster(DataFoundationBuilder):
     def create_cluster_table(self):
         self.con.sql(f"""
             CREATE TABLE {self.working_table_name} AS
-            SELECT *
-            FROM {self.source_table_name}
-            ORDER BY datetime DESC
+                SELECT *
+                FROM {self.source_table_name}
+                ORDER BY datetime DESC
+                LIMIT {self.max_bars}
+                OFFSET {self.window_position}
         """)
         self.con.sql(f"""
             ALTER TABLE {self.working_table_name}
@@ -118,47 +125,70 @@ class Cluster(DataFoundationBuilder):
         self.fractal_period = fractal_period
 
     def set_window_position(self, window_position: int):
-        self.window_position = window_position
+        self.window_position = window_position - 1
 
-    def set_window_end(self):
-
-        self.window_end = self.con.sql(f"""
+    def set_indicator_data(self):
+        self.timestamp = self.con.sql(f"""
             SELECT timestamp
             FROM {self.working_table_name}
             ORDER BY timestamp DESC
-            LIMIT 1 OFFSET {self.window_position - 1}
+            LIMIT 1
         """).fetchone()[0]
 
         self.date = self.con.sql(f"""
             SELECT date
             FROM {self.working_table_name}
             ORDER BY timestamp DESC
-            LIMIT 1 OFFSET {self.window_position - 1}
+            LIMIT 1
         """).fetchone()[0]
 
         self.datetime = self.con.sql(f"""
             SELECT datetime
             FROM {self.working_table_name}
             ORDER BY timestamp DESC
-            LIMIT 1 OFFSET {self.window_position - 1}
+            LIMIT 1
         """).fetchone()[0]
 
-    def set_window_start(self):
-
-        table_length = self.con.sql(f"""
-            SELECT COUNT(*)
-            FROM {self.working_table_name}
-        """).fetchone()[0]
-
-        min_table_length_or_max_bars = min(table_length, self.max_bars)
-        print(min_table_length_or_max_bars)
-
-        self.window_start = self.con.sql(f"""
-            SELECT timestamp
+        self.last_close = self.con.sql(f"""
+            SELECT close
             FROM {self.working_table_name}
             ORDER BY timestamp DESC
             LIMIT 1
-            OFFSET {(self.window_position - 1) + (min_table_length_or_max_bars - 1)}
+        """).fetchone()[0]
+
+        self.last_ema20 = self.con.sql(f"""
+            SELECT ema20
+            FROM {self.working_table_name}
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """).fetchone()[0]
+
+        self.last_ema50 = self.con.sql(f"""
+            SELECT ema50
+            FROM {self.working_table_name}
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """).fetchone()[0]
+
+        self.last_atr14 = self.con.sql(f"""
+            SELECT atr14
+            FROM {self.working_table_name}
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """).fetchone()[0]
+
+        self.last_rsi14 = self.con.sql(f"""
+            SELECT rsi14
+            FROM {self.working_table_name}
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """).fetchone()[0]
+
+        self.last_macd_12_26_9 = self.con.sql(f"""
+            SELECT macd_12_26_9
+            FROM {self.working_table_name}
+            ORDER BY timestamp DESC
+            LIMIT 1
         """).fetchone()[0]
 
     def set_threshold(self):
@@ -172,19 +202,16 @@ class Cluster(DataFoundationBuilder):
             UPDATE {self.working_table_name}
             SET k = {self.cluster_count}
         """)
+
         self.con.sql(f"""
             UPDATE {self.working_table_name}
             SET o = {self.outlier_threshold}
         """)
 
     def generate_cluster_data(self):
-
         df = self.con.sql(f"""
             SELECT *
             FROM {self.working_table_name}
-            WHERE timestamp >= {self.window_start} AND timestamp <= {self.window_end}
-            ORDER BY timestamp ASC
-
         """).to_df()
 
         clusters, centroids = kmeans1d.cluster(df[self.candle_price_point],
@@ -222,7 +249,6 @@ class Cluster(DataFoundationBuilder):
         """)
 
     def remove_outliers(self):
-
         self.con.sql(f"""
             CREATE TABLE {self.working_table_name}_temp AS
             SELECT * FROM {self.working_table_name}
@@ -315,26 +341,38 @@ class Cluster(DataFoundationBuilder):
             SET overallRank = (centDistMeanRank + centCountRank) / 2
         """)
 
-    def select_data(self):
+    def generate_historical_sr(self):
         return self.con.sql(f"""
-            SELECT DISTINCT
-                    '{self.date}' as date,
-                    '{self.datetime}' as datetime,
-                    {self.window_end} as window_end,
-                    {self.window_start} as window_start,
+            WITH base_data AS (
+                SELECT DISTINCT
                     '{self.instrument_name}' as instrument_name,
                     '{self.timeframe}' as timeframe,
-                    clust,
-                    cent,
-                    centDistMean,
-                    centCount,
-                    centDistLstCandle,
-                    centDistLstCandleRank,
-                    centDistMeanRank,
-                    centCountRank,
-                    score,
-                    overallRank
+                    {self.timestamp} as timestamp,
+                    '{self.datetime}' as datetime,
+                    {self.last_close} as close,
                 FROM {self.working_table_name}
-                WHERE ABS(centDistLstCandleRank) = 1
-
+            ),
+            positive_levels AS (
+                SELECT DISTINCT
+                    cent as cent_p1,
+                    overallRank as overallRank_p1
+                FROM {self.working_table_name}
+                WHERE centDistLstCandleRank = 1
+            ),
+            negative_levels AS (
+                SELECT DISTINCT
+                    cent as cent_n1,
+                    overallRank as overallRank_n1
+                FROM {self.working_table_name}
+                WHERE centDistLstCandleRank = -1
+            )
+            SELECT
+                b.*,
+                p.cent_p1,
+                p.overallRank_p1,
+                n.cent_n1,
+                n.overallRank_n1
+            FROM base_data b
+            CROSS JOIN positive_levels p
+            CROSS JOIN negative_levels n
         """)
