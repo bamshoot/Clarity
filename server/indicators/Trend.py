@@ -4,10 +4,13 @@ from .DataFoundationBuilder import DataFoundationBuilder
 
 
 class Trend(DataFoundationBuilder):
-    def __init__(self, db_connection, trends: dict):
+    def __init__(self, db_connection,
+                 trend_length_threshold: dict,
+                 trends_status_rank: dict):
         super().__init__(db_connection)
         self.params_table_name = "tbl_trend_params"
-        self.trend_params = trends
+        self.trend_length_threshold = trend_length_threshold
+        self.trends_status_rank = trends_status_rank
 
     def reset_trends_table(self):
         self.drop_table(self.params_table_name)
@@ -36,7 +39,7 @@ class Trend(DataFoundationBuilder):
             )
         """)
 
-        for trend_id, trend_params in self.trend_params.items():
+        for trend_id, trend_params in self.trends_status_rank.items():
             self.con.sql(f"""
                 INSERT INTO {self.params_table_name}
                 VALUES ('{trend_id}',
@@ -110,12 +113,12 @@ class Trend(DataFoundationBuilder):
 
     def generate_trends(self):
 
-        run_length = 9
-        trend_length = 20
-        major_trend_length = 50
-        run_threshold = 15
-        trend_threshold = 5
-        major_trend_threshold = 5
+        run_length = self.trend_length_threshold["run_length"]
+        trend_length = self.trend_length_threshold["trend_length"]
+        major_trend_length = self.trend_length_threshold["major_trend_length"]
+        run_threshold = self.trend_length_threshold["run_threshold"]
+        trend_threshold = self.trend_length_threshold["trend_threshold"]
+        major_trend_threshold = self.trend_length_threshold["major_trend_threshold"]
 
         data = self.get_table_from_db(self.source_table_name).fetchnumpy()
 

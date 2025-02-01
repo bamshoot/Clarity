@@ -39,6 +39,15 @@ class DataFoundationBuilder:
     def set_output_folder(self, output_folder: str):
         self.output_folder = output_folder
 
+    def get_timestamps_in_source_not_in_working(self):
+        return self.con.sql(f"""
+            SELECT timestamp
+            FROM {self.source_table_name}
+            WHERE timestamp NOT IN (
+                SELECT timestamp FROM {self.working_table_name}
+            )
+        """).fetchall()
+
     def to_csv(self, table_name: str):
         self.con.sql(f"""
             SELECT * FROM {table_name}

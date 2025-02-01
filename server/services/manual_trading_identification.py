@@ -5,13 +5,10 @@ from ..indicators.SourcePrep import SourcePrep
 from ..indicators.Fractal import Fractal
 from ..indicators.Cluster import Cluster
 from ..indicators.CandlePattern import CandlePattern
-from ..indicators.PatternCD import PatternCD
 from ..indicators.MACDPriceCD import MACDPriceCD
 from ..indicators.RSI import RSI
 from ..indicators.Trend import Trend
-from ..indicators.SupportResistance import SupportResistance
 from ..indicators.Pinescript import Pinescript
-from ..indicators.PriceProximity import PriceProximity
 from ..indicators.Summary import Summary
 from ..indicators.Watchlist import Watchlist
 from ..utils.logger import Logger
@@ -48,6 +45,9 @@ class ManualTradingIdentification:
                 src_prep.add_columns()
                 src_prep.generate_last_candle_price()
                 src_prep.generate_index_data()
+                src_prep.generate_sma(9)
+                src_prep.generate_sma(20)
+                src_prep.generate_sma(50)
                 src_prep.generate_ema(20)
                 src_prep.generate_ema(50)
                 src_prep.generate_atr(14)
@@ -122,12 +122,11 @@ class ManualTradingIdentification:
                         f"f{fractal_period}_"
                         f"k{self.params['cluster_count']}")
                     cluster.set_threshold()
-                    cluster.reset_table()
                     cluster.set_window_position(1)
-                    cluster.set_window_end()
-                    cluster.set_window_start()
+                    cluster.reset_table()
                     cluster.generate_input_data()
                     cluster.generate_cluster_data()
+                    cluster.set_indicator_data()
                     cluster.generate_cent_dist()
                     cluster.remove_outliers()
                     cluster.generate_cent_dist_lst_candle()
@@ -139,39 +138,6 @@ class ManualTradingIdentification:
 
         if self.params["to_csv"]:
             cluster.to_csv(cluster.working_table_name)
-
-    def build_support_resistance(self):
-        self.logger.logger.info("Starting - Support Resistance")
-        sr = SupportResistance(self.db)
-        sr.set_data_source(self.params["data_source"])
-        sr.set_working_table_name(f"tbl_{self.params['data_source']}_"
-                                  f"Support_Resistance")
-        sr.drop_table(sr.working_table_name)
-        sr.create_table()
-
-        for instrument in self.params["instruments"]:
-            for timeframe in self.params["timeframes"]:
-                source_table_name = (f"tbl_{self.params['data_source']}_"
-                                     f"{instrument}_"
-                                     f"{timeframe}_"
-                                     f"f2_"
-                                     f"k{self.params['cluster_count']}")
-
-                self.logger.logger.info(f"Building - Support Resistance - "
-                                        f"{source_table_name}")
-
-                sr.set_source_table_name(source_table_name)
-                sr.set_instrument_name(instrument)
-                sr.set_timeframe(timeframe)
-                sr.set_output_folder("sr")
-                sr.set_fractal_period(2)
-                sr.set_cluster_count(self.params["cluster_count"])
-                sr.append_data_to_table()
-
-        if self.params["to_csv"]:
-            sr.to_csv(sr.working_table_name)
-
-        self.logger.logger.info("Finished - Support Resistance")
 
     def build_trend(self):
         self.logger.logger.info("Starting - Trend")
@@ -197,37 +163,6 @@ class ManualTradingIdentification:
             trend.to_csv(trend.working_table_name)
 
         self.logger.logger.info("Finished - Trend")
-
-    async def build_price_proximity(self):
-        self.logger.logger.info("Starting - Price Proximity")
-        pp = PriceProximity(self.db)
-        pp.set_output_folder("price_proximity")
-        pp.set_data_source(self.params["data_source"])
-        pp.set_data_service(self.eod_data_service)
-        pp.set_source_table_name(f"tbl_{self.params['data_source']}_"
-                                 f"Support_Resistance")
-        pp.set_working_table_name(f"tbl_{self.params['data_source']}_"
-                                  f"PriceProximity")
-        pp.reset_price_proximity_table()
-
-        for instrument in self.params["instruments"]:
-            for timeframe in self.params["timeframes"]:
-                self.logger.logger.info(f"Building - Price Proximity - "
-                                        f"{instrument} {timeframe}")
-                pp.set_exchange("FOREX")
-                pp.set_instrument_name(instrument)
-                pp.set_timeframe(timeframe)
-                pp.set_source_table_name(
-                    f"tbl_{self.params['data_source']}_"
-                    f"{instrument}_"
-                    f"{timeframe}")
-                await pp.append_price_atr()
-                pp.calculate_price_proximity()
-
-        if self.params["to_csv"]:
-            pp.to_csv(pp.working_table_name)
-
-        self.logger.logger.info("Finished - Price Proximity")
 
     def build_rsi(self):
         self.logger.logger.info("Starting - RSI")
@@ -282,40 +217,6 @@ class ManualTradingIdentification:
 
         if self.params["to_csv"]:
             macdpcd.to_csv(macdpcd.working_table_name)
-
-    def build_pattern_cd(self):
-        self.logger.logger.info("Starting - Pattern Convergence Divergence")
-        pcd = PatternCD(self.db)
-        pcd.set_output_folder("pattern_cd")
-        pcd.set_data_source(self.params["data_source"])
-        pcd.set_working_table_name(f"tbl_{self.params['data_source']}_"
-                                   f"pattern_cd")
-
-        pcd.reset_pattern_convergence_divergence_table()
-        for instrument in self.params["instruments"]:
-            for timeframe in self.params["timeframes"]:
-                for fractal_period in self.params["fractal_period"][timeframe]:
-                    self.logger.logger.info(f"Building - "
-                                            f"Pattern Convergence Divergence - "
-                                            f"{instrument} {timeframe} "
-                                            f"{fractal_period}")
-                    pcd.set_instrument_name(instrument)
-                    pcd.set_timeframe(timeframe)
-                    pcd.set_fractal_period(fractal_period)
-                    pcd.set_cluster_count(self.params["cluster_count"])
-                    pcd.set_atr_threshold(self.params["atr_threshold"])
-                    pcd.set_source_table_name(
-                        f"tbl_{self.params['data_source']}_"
-                        f"{instrument}_"
-                        f"{timeframe}_"
-                        f"f{fractal_period}_"
-                        f"k{self.params['cluster_count']}")
-                    pcd.generate_pattern_convergence_divergence()
-
-        if self.params["to_csv"]:
-            pcd.to_csv(pcd.working_table_name)
-
-        self.logger.logger.info("Finished - Pattern Convergence Divergence")
 
     def build_candle_pattern(self):
         self.logger.logger.info("Starting - Candle Patterns")
@@ -403,19 +304,16 @@ class ManualTradingIdentification:
             start_time = time.time()
             self.logger.logger.info("Starting - Manual Trading Identification")
 
-            self.build_source_prep()
-            self.build_fractal()
-            self.build_cluster()
-            self.build_support_resistance()
-            self.build_trend()
-            await self.build_price_proximity()
-            self.build_rsi()
-            self.build_macd_price_cd()
-            self.build_pattern_cd()
-            self.build_candle_pattern()
-            self.build_summary()
-            self.build_watchlist()
-            self.build_pinescript()
+            # self.build_source_prep()
+            # self.build_fractal()
+            # self.build_cluster()
+            # self.build_trend()
+            # self.build_rsi()
+            # self.build_macd_price_cd()
+            # self.build_candle_pattern()
+            # self.build_summary()
+            # self.build_watchlist()
+            # self.build_pinescript()
 
             end_time = time.time()
             execution_time = end_time - start_time

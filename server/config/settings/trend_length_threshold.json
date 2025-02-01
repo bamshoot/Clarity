@@ -1,0 +1,8 @@
+{
+    "run_length": 9,
+    "trend_length": 20,
+    "major_trend_length": 50,
+    "run_threshold": 15,
+    "trend_threshold": 5,
+    "major_trend_threshold": 5
+}

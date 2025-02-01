@@ -56,7 +56,6 @@ class Chrono:
         )
         while not self._stop_event.is_set():
             now = datetime.datetime.now(datetime.timezone.utc)
-
             target = now.replace(
                 hour=self.schedule_hour,
                 minute=self.schedule_minute,
@@ -310,6 +309,7 @@ class EODDataCollectionChrono(Chrono):
             )
 
     async def _execute_task(self):
+        print("Running data collection task.")
         self.logger.logger.info("Starting data collection task.")
 
         # for instrument, period in self.cross_rates_periods:
@@ -329,6 +329,7 @@ class EODDataCollectionChrono(Chrono):
         #         self.logger.logger.error(f"Error processing {table_name}: {str(e)}")
 
         if self.manual_trading:
+            print("Running manual trading identification")
             await self.manual_trading.run_analysis()
         else:
             self.logger.logger.warning("ManualTradingIdentification not initialized")

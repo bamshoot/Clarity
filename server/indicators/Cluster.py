@@ -23,30 +23,6 @@ class Cluster(DataFoundationBuilder):
         self.candle_price_point = candle_price_point
         self.threshold = None
         self.last_close = None
-        self.last_ema20 = None
-        self.last_ema50 = None
-        self.last_atr14 = None
-        self.last_rsi14 = None
-        self.last_macd_12_26_9 = None
-
-    def create_sr_table(self):
-        self.con.sql(f"""
-            CREATE TABLE {self.working_table_name}
-            (
-                instrument_name VARCHAR,
-                timeframe VARCHAR,
-                clust INTEGER,
-                cent DOUBLE,
-                centDistMean DOUBLE,
-                centCount DOUBLE,
-                centDistLstCandle DOUBLE,
-                centDistLstCandleRank DOUBLE,
-                centDistMeanRank DOUBLE,
-                centCountRank DOUBLE,
-                score DOUBLE,
-                overallRank DOUBLE
-            )
-        """)
 
     def create_cluster_table(self):
         self.con.sql(f"""
@@ -151,41 +127,6 @@ class Cluster(DataFoundationBuilder):
 
         self.last_close = self.con.sql(f"""
             SELECT close
-            FROM {self.working_table_name}
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """).fetchone()[0]
-
-        self.last_ema20 = self.con.sql(f"""
-            SELECT ema20
-            FROM {self.working_table_name}
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """).fetchone()[0]
-
-        self.last_ema50 = self.con.sql(f"""
-            SELECT ema50
-            FROM {self.working_table_name}
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """).fetchone()[0]
-
-        self.last_atr14 = self.con.sql(f"""
-            SELECT atr14
-            FROM {self.working_table_name}
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """).fetchone()[0]
-
-        self.last_rsi14 = self.con.sql(f"""
-            SELECT rsi14
-            FROM {self.working_table_name}
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """).fetchone()[0]
-
-        self.last_macd_12_26_9 = self.con.sql(f"""
-            SELECT macd_12_26_9
             FROM {self.working_table_name}
             ORDER BY timestamp DESC
             LIMIT 1
@@ -345,34 +286,150 @@ class Cluster(DataFoundationBuilder):
         return self.con.sql(f"""
             WITH base_data AS (
                 SELECT DISTINCT
-                    '{self.instrument_name}' as instrument_name,
-                    '{self.timeframe}' as timeframe,
-                    {self.timestamp} as timestamp,
-                    '{self.datetime}' as datetime,
-                    {self.last_close} as close,
+                    '{self.instrument_name}' AS instrument_name,
+                    '{self.timeframe}' AS timeframe,
+                    {self.timestamp} AS timestamp,
+                    '{self.datetime}' AS datetime,
+                    {self.last_close} AS close
                 FROM {self.working_table_name}
             ),
-            positive_levels AS (
-                SELECT DISTINCT
-                    cent as cent_p1,
-                    overallRank as overallRank_p1
+            rank_data AS (
+                SELECT
+                    {self.timestamp} AS timestamp,
+                    centDistLstCandleRank,
+                    cent,
+                    overallRank
                 FROM {self.working_table_name}
-                WHERE centDistLstCandleRank = 1
             ),
-            negative_levels AS (
-                SELECT DISTINCT
-                    cent as cent_n1,
-                    overallRank as overallRank_n1
-                FROM {self.working_table_name}
-                WHERE centDistLstCandleRank = -1
+            pivoted AS (
+                SELECT
+                    timestamp,
+                    MAX(CASE WHEN centDistLstCandleRank=1
+                        THEN cent END) AS cent_p1,
+                    MAX(CASE WHEN centDistLstCandleRank=1
+                        THEN overallRank END) AS overallRank_p1,
+                    MAX(CASE WHEN centDistLstCandleRank=-1
+                        THEN cent END) AS cent_n1,
+                    MAX(CASE WHEN centDistLstCandleRank=-1
+                        THEN overallRank END) AS overallRank_n1,
+                    MAX(CASE WHEN centDistLstCandleRank=2
+                        THEN cent END) AS cent_p2,
+                    MAX(CASE WHEN centDistLstCandleRank=2
+                        THEN overallRank END) AS overallRank_p2,
+                    MAX(CASE WHEN centDistLstCandleRank=-2
+                        THEN cent END) AS cent_n2,
+                    MAX(CASE WHEN centDistLstCandleRank=-2
+                        THEN overallRank END) AS overallRank_n2,
+                    MAX(CASE WHEN centDistLstCandleRank=3
+                        THEN cent END) AS cent_p3,
+                    MAX(CASE WHEN centDistLstCandleRank=3
+                        THEN overallRank END) AS overallRank_p3,
+                    MAX(CASE WHEN centDistLstCandleRank=-3
+                        THEN cent END) AS cent_n3,
+                    MAX(CASE WHEN centDistLstCandleRank=-3
+                        THEN overallRank END) AS overallRank_n3,
+                    MAX(CASE WHEN centDistLstCandleRank=4
+                        THEN cent END) AS cent_p4,
+                    MAX(CASE WHEN centDistLstCandleRank=4
+                        THEN overallRank END) AS overallRank_p4,
+                    MAX(CASE WHEN centDistLstCandleRank=-4
+                        THEN cent END) AS cent_n4,
+                    MAX(CASE WHEN centDistLstCandleRank=-4
+                        THEN overallRank END) AS overallRank_n4,
+                    MAX(CASE WHEN centDistLstCandleRank=5
+                        THEN cent END) AS cent_p5,
+                    MAX(CASE WHEN centDistLstCandleRank=5
+                        THEN overallRank END) AS overallRank_p5,
+                    MAX(CASE WHEN centDistLstCandleRank=-5
+                        THEN cent END) AS cent_n5,
+                    MAX(CASE WHEN centDistLstCandleRank=-5
+                        THEN overallRank END) AS overallRank_n5,
+                    MAX(CASE WHEN centDistLstCandleRank=6
+                        THEN cent END) AS cent_p6,
+                    MAX(CASE WHEN centDistLstCandleRank=6
+                        THEN overallRank END) AS overallRank_p6,
+                    MAX(CASE WHEN centDistLstCandleRank=-6
+                        THEN cent END) AS cent_n6,
+                    MAX(CASE WHEN centDistLstCandleRank=-6
+                        THEN overallRank END) AS overallRank_n6,
+                    MAX(CASE WHEN centDistLstCandleRank=7
+                        THEN cent END) AS cent_p7,
+                    MAX(CASE WHEN centDistLstCandleRank=7
+                        THEN overallRank END) AS overallRank_p7,
+                    MAX(CASE WHEN centDistLstCandleRank=-7
+                        THEN cent END) AS cent_n7,
+                    MAX(CASE WHEN centDistLstCandleRank=-7
+                        THEN overallRank END) AS overallRank_n7,
+                    MAX(CASE WHEN centDistLstCandleRank=8
+                        THEN cent END) AS cent_p8,
+                    MAX(CASE WHEN centDistLstCandleRank=8
+                        THEN overallRank END) AS overallRank_p8,
+                    MAX(CASE WHEN centDistLstCandleRank=-8
+                        THEN cent END) AS cent_n8,
+                    MAX(CASE WHEN centDistLstCandleRank=-8
+                        THEN overallRank END) AS overallRank_n8,
+                    MAX(CASE WHEN centDistLstCandleRank=9
+                        THEN cent END) AS cent_p9,
+                    MAX(CASE WHEN centDistLstCandleRank=9
+                        THEN overallRank END) AS overallRank_p9,
+                    MAX(CASE WHEN centDistLstCandleRank=-9
+                        THEN cent END) AS cent_n9,
+                    MAX(CASE WHEN centDistLstCandleRank=-9
+                        THEN overallRank END) AS overallRank_n9,
+                    MAX(CASE WHEN centDistLstCandleRank=10
+                        THEN cent END) AS cent_p10,
+                    MAX(CASE WHEN centDistLstCandleRank=10
+                        THEN overallRank END) AS overallRank_p10,
+                    MAX(CASE WHEN centDistLstCandleRank=-10
+                        THEN cent END) AS cent_n10,
+                    MAX(CASE WHEN centDistLstCandleRank=-10
+                        THEN overallRank END) AS overallRank_n10
+                FROM rank_data
+                GROUP BY timestamp
             )
             SELECT
                 b.*,
                 p.cent_p1,
                 p.overallRank_p1,
-                n.cent_n1,
-                n.overallRank_n1
+                p.cent_n1,
+                p.overallRank_n1,
+                p.cent_p2,
+                p.overallRank_p2,
+                p.cent_n2,
+                p.overallRank_n2,
+                p.cent_p3,
+                p.overallRank_p3,
+                p.cent_n3,
+                p.overallRank_n3,
+                p.cent_p4,
+                p.overallRank_p4,
+                p.cent_n4,
+                p.overallRank_n4,
+                p.cent_p5,
+                p.overallRank_p5,
+                p.cent_n5,
+                p.overallRank_n5,
+                p.cent_p6,
+                p.overallRank_p6,
+                p.cent_n6,
+                p.overallRank_n6,
+                p.cent_p7,
+                p.overallRank_p7,
+                p.cent_n7,
+                p.overallRank_n7,
+                p.cent_p8,
+                p.overallRank_p8,
+                p.cent_n8,
+                p.overallRank_n8,
+                p.cent_p9,
+                p.overallRank_p9,
+                p.cent_n9,
+                p.overallRank_n9,
+                p.cent_p10,
+                p.overallRank_p10,
+                p.cent_n10,
+                p.overallRank_n10
             FROM base_data b
-            CROSS JOIN positive_levels p
-            CROSS JOIN negative_levels n
+            LEFT JOIN pivoted p
+            ON b.timestamp = p.timestamp
         """)

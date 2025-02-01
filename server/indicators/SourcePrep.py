@@ -64,6 +64,25 @@ class SourcePrep(DataFoundationBuilder):
         """)
         self.drop_table(f"{self.source_table_name}_temp")
 
+    def generate_sma(self, period: int):
+        data = self.con.sql(f"SELECT * FROM {self.source_table_name}").fetchnumpy()
+        sma = ta.SMA(data["close"], period)
+        data[f"sma{period}"] = sma
+
+        self.con.sql(f"""
+            CREATE TABLE {self.source_table_name}_temp AS
+            SELECT * FROM data
+        """)
+
+        self.con.sql(f"""
+            DROP TABLE IF EXISTS {self.source_table_name}
+        """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.source_table_name}_temp
+            RENAME TO {self.source_table_name}
+        """)
+
     def generate_ema(self, period: int):
         data = self.con.sql(f"SELECT * FROM {self.source_table_name}").fetchnumpy()
         ema = ta.EMA(data["close"], period)

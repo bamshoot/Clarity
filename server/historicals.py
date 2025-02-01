@@ -1,3 +1,4 @@
+from indicators.Summary import Summary
 from indicators.Cluster import Cluster
 from indicators.Fractal import Fractal
 from database.db import DB
@@ -12,37 +13,69 @@ class Historicals:
         self.params = config.EOD_MnTrd_PARAMS
         self.logger = Logger("historicals")
         self.db = db_connection
+        self.timestamps_in_source_not_in_working = []
 
     def build_fractal(self):
         self.logger.logger.info("Starting - Fractal")
         fractal = Fractal(self.db, self.params["candle_price_point"])
-
         fractal.set_data_source(self.params["data_source"])
         fractal.set_output_folder("fractals")
-        fractal.set_instrument_name(self.params["instruments"][0])
-        fractal.set_timeframe(self.params["timeframes"][0])
-        fractal.set_fractal_period(
-            self.params["fractal_period"][self.params["timeframes"][0]][0])
 
-        fractal.set_source_table_name(
-            f"tbl_{self.params['data_source']}_"
-            f"{self.params['instruments'][0]}_"
-            f"{self.params['timeframes'][0]}")
+        for instrument in self.params["instruments"]:
+            for timeframe in self.params["timeframes"]:
+                for fractal_period in self.params["fractal_period"][timeframe]:
+                    self.logger.logger.info(
+                        f"Building Fractal - {instrument} {timeframe} {fractal_period}")
 
-        fractal.set_working_table_name(
-            f"tbl_{self.params['data_source']}_"
-            f"{self.params['instruments'][0]}_"
-            f"{self.params['timeframes'][0]}_"
-            f"f{self.params['fractal_period'][self.params['timeframes'][0]][0]}")
+                    fractal.set_instrument_name(instrument)
+                    fractal.set_timeframe(timeframe)
+                    fractal.set_fractal_period(fractal_period)
 
-        fractal.reset_table()
-        fractal.generate_input_data()
-        fractal.generate_fractal_data()
+                    fractal.set_source_table_name(
+                        f"tbl_{self.params['data_source']}_"
+                        f"{instrument}_"
+                        f"{timeframe}")
+
+                    fractal.set_working_table_name(
+                        f"tbl_{self.params['data_source']}_"
+                        f"{instrument}_"
+                        f"{timeframe}_"
+                        f"f{fractal_period}")
+
+                    fractal.reset_table()
+                    fractal.generate_input_data()
+                    fractal.generate_fractal_data()
+
+                    if self.params["to_csv"]:
+                        fractal.to_csv(fractal.working_table_name)
 
         self.logger.logger.info("Finished - Fractal")
 
-        if self.params["to_csv"]:
-            fractal.to_csv(fractal.working_table_name)
+    def build_summary(self):
+        self.logger.logger.info("Starting - Summary")
+        summary = Summary(self.db)
+        summary.set_data_source(self.params["data_source"])
+
+        for instrument in self.params["instruments"]:
+            for timeframe in self.params["timeframes"]:
+                self.logger.logger.info(
+                    f"Building Summary - {instrument} {timeframe}")
+
+                summary.set_instrument_name(instrument)
+                summary.set_timeframe(timeframe)
+                summary.set_source_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}")
+                summary.set_working_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}_"
+                    f"summary")
+                summary.create_summary_table()
+                summary.append_rows_to_summary_table()
+
+        self.logger.logger.info("Finished - Summary")
 
     def build_cluster(self):
         self.logger.logger.info("Starting - Cluster")
@@ -52,44 +85,43 @@ class Historicals:
                           self.params["outlier_threshold"],
                           self.params["candle_price_point"])
         cluster.set_data_source(self.params["data_source"])
-        cluster.set_instrument_name(self.params["instruments"][0])
-        cluster.set_timeframe(self.params["timeframes"][0])
-        cluster.set_fractal_period(
-            self.params["fractal_period"][self.params["timeframes"][0]][0])
         cluster.set_output_folder("clusters")
-        cluster.set_instrument_name(self.params["instruments"][0])
-        cluster.set_timeframe(self.params["timeframes"][0])
-        cluster.set_fractal_period(
-            self.params["fractal_period"][self.params["timeframes"][0]][0])
 
-        source_table_name = (
-            f"tbl_{self.params['data_source']}_"
-            f"{self.params['instruments'][0]}_"
-            f"{self.params['timeframes'][0]}_"
-            f"f{self.params['fractal_period'][self.params['timeframes'][0]][0]}")
+        for instrument in self.params["instruments"]:
+            for timeframe in self.params["timeframes"]:
+                for fractal_period in self.params["fractal_period"][timeframe]:
+                    self.logger.logger.info(
+                        f"Building Cluster - {instrument} {timeframe} {fractal_period}")
 
-        working_table_name = (
-                f"tbl_{self.params['data_source']}_"
-                f"{self.params['instruments'][0]}_"
-                f"{self.params['timeframes'][0]}_"
-                f"f{self.params['fractal_period'][self.params['timeframes'][0]][0]}_"
-                f"k{self.params['cluster_count']}")
+                    cluster.set_instrument_name(instrument)
+                    cluster.set_timeframe(timeframe)
+                    cluster.set_fractal_period(fractal_period)
 
-        cluster.set_source_table_name(source_table_name)
-        cluster.set_working_table_name(working_table_name)
-        cluster.set_threshold()
-        cluster.set_window_position(6)
-        cluster.reset_table()
-        cluster.generate_input_data()
-        cluster.generate_cluster_data()
-        cluster.set_indicator_data()
-        cluster.generate_cent_dist()
-        cluster.remove_outliers()
-        cluster.generate_cent_dist_lst_candle()
-        cluster.generate_cent_count()
-        cluster.generate_score()
-        cluster.generate_rank()
-        print(cluster.generate_historical_sr())
+                    cluster.set_source_table_name(
+                        f"tbl_{self.params['data_source']}_"
+                        f"{instrument}_"
+                        f"{timeframe}")
+
+                    cluster.set_working_table_name(
+                        f"tbl_{self.params['data_source']}_"
+                        f"{instrument}_"
+                        f"{timeframe}_"
+                        f"f{fractal_period}_"
+                        f"k{self.params['cluster_count']}")
+
+                    cluster.set_threshold()
+                    cluster.set_window_position(6)
+                    cluster.reset_table()
+                    cluster.generate_input_data()
+                    cluster.generate_cluster_data()
+                    cluster.set_indicator_data()
+                    cluster.generate_cent_dist()
+                    cluster.remove_outliers()
+                    cluster.generate_cent_dist_lst_candle()
+                    cluster.generate_cent_count()
+                    cluster.generate_score()
+                    cluster.generate_rank()
+                    print(cluster.generate_historical_sr())
 
         self.logger.logger.info("Finished - Cluster")
 
@@ -102,7 +134,8 @@ if __name__ == "__main__":
 
     h = Historicals(config, db)
     h.build_fractal()
-    h.build_cluster()
+    h.build_summary()
+    # h.build_cluster()
     end_time = time.time()
     execution_time = end_time - start_time
     print(f"Time taken: {execution_time} seconds")
