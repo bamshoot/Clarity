@@ -94,6 +94,168 @@ class Cluster(DataFoundationBuilder):
         self.drop_table(self.working_table_name)
         self.create_cluster_table()
 
+    def add_columns_to_summary_table(self):
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_p1 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_p1 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_n1 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_n1 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_p2 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_p2 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_n2 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_n2 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_p3 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_p3 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_n3 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_n3 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_p4 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_p4 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_n4 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_n4 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_p5 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_p5 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_n5 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_n5 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_p6 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_p6 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_n6 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_n6 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_p7 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_p7 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_n7 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_n7 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_p8 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_p8 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_n8 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_n8 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_p9 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_p9 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_n9 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_n9 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_p10 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_p10 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS cent_n10 DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS overallRank_n10 DOUBLE
+        """)
+
     def set_sr_table_name(self, sr_table_name: str):
         self.sr_table_name = sr_table_name
 
@@ -101,7 +263,7 @@ class Cluster(DataFoundationBuilder):
         self.fractal_period = fractal_period
 
     def set_window_position(self, window_position: int):
-        self.window_position = window_position - 1
+        self.window_position = window_position
 
     def set_indicator_data(self):
         self.timestamp = self.con.sql(f"""
@@ -283,7 +445,7 @@ class Cluster(DataFoundationBuilder):
         """)
 
     def generate_historical_sr(self):
-        return self.con.sql(f"""
+        self.con.sql(f"""
             WITH base_data AS (
                 SELECT DISTINCT
                     '{self.instrument_name}' AS instrument_name,
@@ -386,50 +548,95 @@ class Cluster(DataFoundationBuilder):
                         THEN overallRank END) AS overallRank_n10
                 FROM rank_data
                 GROUP BY timestamp
+            ),
+            cent_data AS (
+                SELECT
+                    b.timestamp,
+                    p.cent_p1,
+                    p.overallRank_p1,
+                    p.cent_n1,
+                    p.overallRank_n1,
+                    p.cent_p2,
+                    p.overallRank_p2,
+                    p.cent_n2,
+                    p.overallRank_n2,
+                    p.cent_p3,
+                    p.overallRank_p3,
+                    p.cent_n3,
+                    p.overallRank_n3,
+                    p.cent_p4,
+                    p.overallRank_p4,
+                    p.cent_n4,
+                    p.overallRank_n4,
+                    p.cent_p5,
+                    p.overallRank_p5,
+                    p.cent_n5,
+                    p.overallRank_n5,
+                    p.cent_p6,
+                    p.overallRank_p6,
+                    p.cent_n6,
+                    p.overallRank_n6,
+                    p.cent_p7,
+                    p.overallRank_p7,
+                    p.cent_n7,
+                    p.overallRank_n7,
+                    p.cent_p8,
+                    p.overallRank_p8,
+                    p.cent_n8,
+                    p.overallRank_n8,
+                    p.cent_p9,
+                    p.overallRank_p9,
+                    p.cent_n9,
+                    p.overallRank_n9,
+                    p.cent_p10,
+                    p.overallRank_p10,
+                    p.cent_n10,
+                    p.overallRank_n10
+                FROM base_data b
+                LEFT JOIN pivoted p
+                ON b.timestamp = p.timestamp
             )
-            SELECT
-                b.*,
-                p.cent_p1,
-                p.overallRank_p1,
-                p.cent_n1,
-                p.overallRank_n1,
-                p.cent_p2,
-                p.overallRank_p2,
-                p.cent_n2,
-                p.overallRank_n2,
-                p.cent_p3,
-                p.overallRank_p3,
-                p.cent_n3,
-                p.overallRank_n3,
-                p.cent_p4,
-                p.overallRank_p4,
-                p.cent_n4,
-                p.overallRank_n4,
-                p.cent_p5,
-                p.overallRank_p5,
-                p.cent_n5,
-                p.overallRank_n5,
-                p.cent_p6,
-                p.overallRank_p6,
-                p.cent_n6,
-                p.overallRank_n6,
-                p.cent_p7,
-                p.overallRank_p7,
-                p.cent_n7,
-                p.overallRank_n7,
-                p.cent_p8,
-                p.overallRank_p8,
-                p.cent_n8,
-                p.overallRank_n8,
-                p.cent_p9,
-                p.overallRank_p9,
-                p.cent_n9,
-                p.overallRank_n9,
-                p.cent_p10,
-                p.overallRank_p10,
-                p.cent_n10,
-                p.overallRank_n10
-            FROM base_data b
-            LEFT JOIN pivoted p
-            ON b.timestamp = p.timestamp
+            UPDATE {self.summary_table_name}
+            SET cent_p1 = cent_data.cent_p1,
+                overallRank_p1 = cent_data.overallRank_p1,
+                cent_n1 = cent_data.cent_n1,
+                overallRank_n1 = cent_data.overallRank_n1,
+                cent_p2 = cent_data.cent_p2,
+                overallRank_p2 = cent_data.overallRank_p2,
+                cent_n2 = cent_data.cent_n2,
+                overallRank_n2 = cent_data.overallRank_n2,
+                cent_p3 = cent_data.cent_p3,
+                overallRank_p3 = cent_data.overallRank_p3,
+                cent_n3 = cent_data.cent_n3,
+                overallRank_n3 = cent_data.overallRank_n3,
+                cent_p4 = cent_data.cent_p4,
+                overallRank_p4 = cent_data.overallRank_p4,
+                cent_n4 = cent_data.cent_n4,
+                overallRank_n4 = cent_data.overallRank_n4,
+                cent_p5 = cent_data.cent_p5,
+                overallRank_p5 = cent_data.overallRank_p5,
+                cent_n5 = cent_data.cent_n5,
+                overallRank_n5 = cent_data.overallRank_n5,
+                cent_p6 = cent_data.cent_p6,
+                overallRank_p6 = cent_data.overallRank_p6,
+                cent_n6 = cent_data.cent_n6,
+                overallRank_n6 = cent_data.overallRank_n6,
+                cent_p7 = cent_data.cent_p7,
+                overallRank_p7 = cent_data.overallRank_p7,
+                cent_n7 = cent_data.cent_n7,
+                overallRank_n7 = cent_data.overallRank_n7,
+                cent_p8 = cent_data.cent_p8,
+                overallRank_p8 = cent_data.overallRank_p8,
+                cent_n8 = cent_data.cent_n8,
+                overallRank_n8 = cent_data.overallRank_n8,
+                cent_p9 = cent_data.cent_p9,
+                overallRank_p9 = cent_data.overallRank_p9,
+                cent_n9 = cent_data.cent_n9,
+                overallRank_n9 = cent_data.overallRank_n9,
+                cent_p10 = cent_data.cent_p10,
+                overallRank_p10 = cent_data.overallRank_p10,
+                cent_n10 = cent_data.cent_n10,
+                overallRank_n10 = cent_data.overallRank_n10
+            FROM cent_data
+            WHERE {self.summary_table_name}.timestamp = cent_data.timestamp
         """)

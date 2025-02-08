@@ -14,6 +14,7 @@ class DataFoundationBuilder:
         self.source_table_name = None
         self.working_table_name = None
         self.output_folder = None
+        self.summary_table_name = None
 
     def get_table_from_db(self, table_name: str):
         return self.con.sql(f"SELECT * FROM {table_name}")
@@ -36,17 +37,11 @@ class DataFoundationBuilder:
     def set_working_table_name(self, working_table_name: str):
         self.working_table_name = working_table_name
 
+    def set_summary_table_name(self, summary_table_name: str):
+        self.summary_table_name = summary_table_name
+
     def set_output_folder(self, output_folder: str):
         self.output_folder = output_folder
-
-    def get_timestamps_in_source_not_in_working(self):
-        return self.con.sql(f"""
-            SELECT timestamp
-            FROM {self.source_table_name}
-            WHERE timestamp NOT IN (
-                SELECT timestamp FROM {self.working_table_name}
-            )
-        """).fetchall()
 
     def to_csv(self, table_name: str):
         self.con.sql(f"""
