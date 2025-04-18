@@ -19,7 +19,6 @@ class Summary(DataFoundationBuilder):
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_NAME = '{table_name}'
         """).fetchall()
-        # Extract column names from the result tuples
         return [row[0] for row in result]
 
     def delete_last_5_rows(self):
@@ -31,6 +30,11 @@ class Summary(DataFoundationBuilder):
                 ORDER BY timestamp DESC
                 LIMIT 5
             )
+        """)
+
+    def delete_all_rows(self):
+        self.con.sql(f"""
+            DELETE FROM {self.working_table_name}
         """)
 
     def get_timestamps_in_raw_not_in_summary(self):

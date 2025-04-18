@@ -74,7 +74,7 @@ class Historicals:
                     f"summary")
 
                 summary.create_summary_table()
-                summary.delete_last_5_rows()
+                summary.delete_all_rows()
 
                 self.timestamps_in_raw_not_in_summary[f'{instrument}_{timeframe}'] = \
                     summary.get_timestamps_in_raw_not_in_summary()
