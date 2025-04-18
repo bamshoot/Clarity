@@ -1,6 +1,7 @@
 from indicators.Summary import Summary
 from indicators.Cluster import Cluster
 from indicators.Fractal import Fractal
+from indicators.SourcePrep import SourcePrep
 from database.db import DB
 from config.config import Config
 from utils.logger import Logger
@@ -14,6 +15,32 @@ class Historicals:
         self.logger = Logger("historicals")
         self.db = db_connection
         self.timestamps_in_raw_not_in_summary = {}
+
+    def build_source_prep(self):
+        self.logger.logger.info("Starting - Source Prep")
+        src_prep = SourcePrep(self.db)
+        src_prep.set_candle_price_point("close")
+        for instrument in self.params["instruments"]:
+            for timeframe in self.params["timeframes"]:
+                self.logger.logger.info(f"Building - Source Prep - "
+                                        f"{instrument} {timeframe}")
+                src_prep.set_source_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}")
+                src_prep.add_columns()
+                src_prep.generate_last_candle_price()
+                src_prep.generate_index_data()
+                src_prep.generate_sma(9)
+                src_prep.generate_sma(20)
+                src_prep.generate_sma(50)
+                src_prep.generate_ema(20)
+                src_prep.generate_ema(50)
+                src_prep.generate_atr(14)
+                src_prep.generate_rsi(14)
+                src_prep.generate_macd(12, 26, 9)
+
+        self.logger.logger.info("Finished - Source Prep")
 
     def build_fractal(self):
         self.logger.logger.info("Starting - Fractal")
@@ -74,7 +101,7 @@ class Historicals:
                     f"summary")
 
                 summary.create_summary_table()
-                summary.delete_all_rows()
+                # summary.delete_all_rows()
 
                 self.timestamps_in_raw_not_in_summary[f'{instrument}_{timeframe}'] = \
                     summary.get_timestamps_in_raw_not_in_summary()
@@ -155,6 +182,7 @@ if __name__ == "__main__":
 
     h = Historicals(config, db)
 
+    # h.build_source_prep()
     h.build_fractal()
     h.build_summary()
     h.build_cluster()
