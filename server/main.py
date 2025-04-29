@@ -36,8 +36,8 @@ async def lifespan(app: FastAPI):
         eod_data_service,
         max_concurrent_requests=3,
         db=app.state.db,
-        schedule_hour=1,
-        schedule_minute=30,
+        schedule_hour=0,
+        schedule_minute=23,
         manual_trading=app.state.manual_trading
     )
 

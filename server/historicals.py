@@ -2,6 +2,8 @@ from indicators.Summary import Summary
 from indicators.Cluster import Cluster
 from indicators.Fractal import Fractal
 from indicators.SourcePrep import SourcePrep
+from indicators.RSI import RSI
+from indicators.Timestamps import Timestamps
 from database.db import DB
 from config.config import Config
 from utils.logger import Logger
@@ -173,19 +175,72 @@ class Historicals:
 
         self.logger.logger.info("Finished - Cluster")
 
+    def build_timestamps(self):
+        self.logger.logger.info("Starting - Timestamps")
+        timestamps = Timestamps(self.db)
+
+        for instrument in self.params["instruments"]:
+            for timeframe in self.params["timeframes"]:
+                self.logger.logger.info(
+                    f"Building Timestamps - {instrument} {timeframe}")
+
+                timestamps.set_instrument_name(instrument)
+                timestamps.set_timeframe(timeframe)
+
+                timestamps.set_data_source(self.params["data_source"])
+                timestamps.set_working_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}")
+
+                timestamps.set_timestamp_ref_table()
+
+        self.logger.logger.info("Finished - Timestamps")
+
+        return timestamps
+
+    def build_rsi(self, timestamps):
+        self.logger.logger.info("Starting - RSI")
+        rsi = RSI(self.db)
+        rsi.set_data_source(self.params["data_source"])
+
+        rsi.set_working_table_name(
+            f"tbl_{self.params['data_source']}_"
+            f"rsi")
+
+        # rsi.reset_rsi_table()
+
+        for timeframe in self.params["timeframes"]:
+            self.logger.logger.info(
+                f"Building RSI - {timeframe}")
+
+            rsi.set_timeframe(timeframe)
+            print(rsi.get_rsi(timestamps.timestamp_ref_table_1h_timestamp[-1000][0]))
+
+        self.logger.logger.info("Finished - RSI")
+
 
 if __name__ == "__main__":
-
     start_time = time.time()
     config = Config()
     db = DB(config.DB_PATH)
 
     h = Historicals(config, db)
+    timestamps = h.build_timestamps()
 
     # h.build_source_prep()
-    h.build_fractal()
-    h.build_summary()
-    h.build_cluster()
+    # h.build_fractal()
+    # h.build_summary()
+    # h.build_cluster()
+    h.build_rsi(timestamps)
+
+    # print(timestamps.min_timestamp_1h)
+    # print(timestamps.min_timestamp_d)
+    # print(timestamps.min_timestamp_w)
+    # print(timestamps.min_timestamp_m)
+
+    # print(timestamps.timestamp_ref_table_1h_timestamp[0][0])
+
     end_time = time.time()
     execution_time = end_time - start_time
     print(f"Time taken: {execution_time} seconds")
