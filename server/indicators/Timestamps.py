@@ -86,7 +86,7 @@ class Timestamps(DataFoundationBuilder):
                 self.min_instrument_d = self.instrument_name
                 self.timestamp_ref_table_d = self.working_table_name
                 self.timestamp_ref_table_d_timestamp = self.con.sql(
-                    f"SELECT timestamp FROM {self.working_table_name}")
+                    f"SELECT timestamp FROM {self.working_table_name}").fetchall()
 
         elif self.timeframe == "w":
             if self.min_timestamp_w is None or \
@@ -101,7 +101,7 @@ class Timestamps(DataFoundationBuilder):
                 self.min_instrument_w = self.instrument_name
                 self.timestamp_ref_table_w = self.working_table_name
                 self.timestamp_ref_table_w_timestamp = self.con.sql(
-                    f"SELECT timestamp FROM {self.working_table_name}")
+                    f"SELECT timestamp FROM {self.working_table_name}").fetchall()
 
         elif self.timeframe == "m":
             if self.min_timestamp_m is None or \
@@ -116,4 +116,4 @@ class Timestamps(DataFoundationBuilder):
                 self.min_instrument_m = self.instrument_name
                 self.timestamp_ref_table_m = self.working_table_name
                 self.timestamp_ref_table_m_timestamp = self.con.sql(
-                    f"SELECT timestamp FROM {self.working_table_name}")
+                    f"SELECT timestamp FROM {self.working_table_name}").fetchall()

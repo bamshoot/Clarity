@@ -215,7 +215,23 @@ class Historicals:
                 f"Building RSI - {timeframe}")
 
             rsi.set_timeframe(timeframe)
-            print(rsi.get_rsi(timestamps.timestamp_ref_table_1h_timestamp[-1000][0]))
+
+            if timeframe == "1h":
+                rsi.build_rsi_data(
+                    timestamps.timestamp_ref_table_1h_timestamp[-100][0])
+                print(rsi.get_rsi_data())
+            elif timeframe == "d":
+                rsi.build_rsi_data(
+                    timestamps.timestamp_ref_table_d_timestamp[-100][0])
+                print(rsi.get_rsi_data())
+            elif timeframe == "w":
+                rsi.build_rsi_data(
+                    timestamps.timestamp_ref_table_w_timestamp[-100][0])
+                print(rsi.get_rsi_data())
+            elif timeframe == "m":
+                rsi.build_rsi_data(
+                    timestamps.timestamp_ref_table_m_timestamp[-100][0])
+                print(rsi.get_rsi_data())
 
         self.logger.logger.info("Finished - RSI")
 
