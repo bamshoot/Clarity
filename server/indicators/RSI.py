@@ -4,10 +4,58 @@ from .DataFoundationBuilder import DataFoundationBuilder
 class RSI(DataFoundationBuilder):
     def __init__(self, db_connection):
         super().__init__(db_connection)
-        self.rsi_data = None
+
+    def reset_rsi_data(self):
+        self._drop_rsi_columns()
+        self._add_rsi_columns()
+
+    def _drop_rsi_columns(self):
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS rsi_diff
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS rsi_rank
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS rsi_status
+        """)
+
+    def _add_rsi_columns(self):
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS rsi_diff DOUBLE
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS rsi_rank INTEGER
+        """)
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS rsi_status VARCHAR(10)
+        """)
+
+    def insert_rsi_data(self, instrument, timestamp):
+        self.con.sql(f"""
+            UPDATE {self.working_table_name}
+            SET rsi_diff = t.rsi_diff,
+                rsi_rank = t.rsi_rank,
+                rsi_status = t.rsi_status
+            FROM tbl_rsi_temp t
+            WHERE {self.working_table_name}.timestamp = t.timestamp
+            AND t.timestamp = {timestamp}
+            AND t.instrument = '{instrument}'
+        """)
 
     def build_rsi_data(self, timestamp):
-        rsi_data = self.con.sql(f"""
+        self.con.sql("""
+            DROP TABLE IF EXISTS tbl_rsi_temp
+        """)
+
+        self.con.sql(f"""
+            CREATE TABLE tbl_rsi_temp AS
             WITH EURUSD_rsi AS (
                 SELECT 'EURUSD' as instrument, '{self.timeframe}' as timeframe,
                        timestamp, rsi14
@@ -176,108 +224,102 @@ class RSI(DataFoundationBuilder):
                 FROM tbl_{self.data_source}_NZDCHF_{self.timeframe}
                 WHERE timestamp = {timestamp}
             ),
-
             rsi_data AS (
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM EURUSD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM GBPUSD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM USDJPY_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM AUDUSD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM USDCHF_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM USDCAD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM NZDUSD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM EURGBP_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM EURJPY_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM EURAUD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM EURCAD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM EURCHF_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM EURNZD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM GBPJPY_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM GBPAUD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM GBPCHF_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM GBPCAD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM GBPNZD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM AUDJPY_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM AUDCHF_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM AUDCAD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM AUDNZD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM CHFJPY_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM CADJPY_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM NZDJPY_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM CADCHF_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM NZDCAD_rsi
-            UNION ALL
-            SELECT instrument, timeframe, timestamp, rsi14
-            FROM NZDCHF_rsi
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM EURUSD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM GBPUSD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM USDJPY_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM AUDUSD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM USDCHF_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM USDCAD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM NZDUSD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM EURGBP_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM EURJPY_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM EURAUD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM EURCAD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM EURCHF_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM EURNZD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM GBPJPY_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM GBPAUD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM GBPCHF_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM GBPCAD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM GBPNZD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM AUDJPY_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM AUDCHF_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM AUDCAD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM AUDNZD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM CHFJPY_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM CADJPY_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM NZDJPY_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM CADCHF_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM NZDCAD_rsi
+                UNION ALL
+                SELECT instrument, timeframe, timestamp, rsi14
+                FROM NZDCHF_rsi
             )
-            SELECT *, abs(rsi14 - 50) as rsi_diff,
-            DENSE_RANK() OVER (
-                PARTITION BY timeframe
-                ORDER BY rsi_diff DESC
-            ) as rsi_rank,
-            CASE
-                WHEN rsi_diff >= 10 AND rsi14 < 50 THEN 'buy'
-                WHEN rsi_diff >= 10 AND rsi14 > 50 THEN 'sell'
-                ELSE 'neutral'
-            END as rsi_status
+            SELECT *,
+                   abs(rsi14 - 50) as rsi_diff,
+                   DENSE_RANK() OVER (
+                       PARTITION BY timeframe
+                       ORDER BY abs(rsi14 - 50) DESC
+                   ) as rsi_rank,
+                   CASE
+                       WHEN abs(rsi14 - 50) >= 10 AND rsi14 < 50 THEN 'buy'
+                       WHEN abs(rsi14 - 50) >= 10 AND rsi14 > 50 THEN 'sell'
+                       ELSE 'neutral'
+                   END as rsi_status
             FROM rsi_data
             ORDER BY rsi_diff DESC
         """)
-
-        self.rsi_data = rsi_data
-
-    def get_rsi_data(self):
-
-        return self.rsi_data

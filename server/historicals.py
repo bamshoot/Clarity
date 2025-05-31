@@ -3,6 +3,7 @@ from indicators.Cluster import Cluster
 from indicators.Fractal import Fractal
 from indicators.SourcePrep import SourcePrep
 from indicators.RSI import RSI
+from indicators.Trend import Trend
 from indicators.Timestamps import Timestamps
 from database.db import DB
 from config.config import Config
@@ -14,6 +15,9 @@ class Historicals:
     def __init__(self, config: Config, db_connection=None):
         self.config = config
         self.params = config.EOD_MnTrd_PARAMS
+        self.trends_status_rank = config.Trends_Status_Rank
+        self.trend_length_threshold = config.Trends_Length_Threshold
+        self.candle_patterns = config.Candle_Patterns
         self.logger = Logger("historicals")
         self.db = db_connection
         self.timestamps_in_raw_not_in_summary = {}
@@ -204,36 +208,74 @@ class Historicals:
         rsi = RSI(self.db)
         rsi.set_data_source(self.params["data_source"])
 
-        rsi.set_working_table_name(
-            f"tbl_{self.params['data_source']}_"
-            f"rsi")
-
-        # rsi.reset_rsi_table()
-
         for timeframe in self.params["timeframes"]:
             self.logger.logger.info(
                 f"Building RSI - {timeframe}")
 
             rsi.set_timeframe(timeframe)
 
+            for instrument in self.params["instruments"]:
+                rsi.set_instrument_name(instrument)
+                rsi.set_working_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}_"
+                    f"summary")
+                rsi.reset_rsi_data()
+
             if timeframe == "1h":
-                rsi.build_rsi_data(
-                    timestamps.timestamp_ref_table_1h_timestamp[-100][0])
-                print(rsi.get_rsi_data())
+                for timestamp in timestamps.timestamp_ref_table_1h_timestamp:
+                    rsi.build_rsi_data(timestamp[0])
+                    for instrument in self.params["instruments"]:
+                        self.logger.logger.info(
+                            f"Building RSI - {instrument} {timeframe} {timestamp[0]}")
+                        rsi.set_instrument_name(instrument)
+                        rsi.set_working_table_name(
+                            f"tbl_{self.params['data_source']}_"
+                            f"{instrument}_"
+                            f"{timeframe}_"
+                            f"summary")
+                        rsi.insert_rsi_data(instrument, timestamp[0])
             elif timeframe == "d":
-                rsi.build_rsi_data(
-                    timestamps.timestamp_ref_table_d_timestamp[-100][0])
-                print(rsi.get_rsi_data())
-            elif timeframe == "w":
-                rsi.build_rsi_data(
-                    timestamps.timestamp_ref_table_w_timestamp[-100][0])
-                print(rsi.get_rsi_data())
-            elif timeframe == "m":
-                rsi.build_rsi_data(
-                    timestamps.timestamp_ref_table_m_timestamp[-100][0])
-                print(rsi.get_rsi_data())
+                for timestamp in timestamps.timestamp_ref_table_d_timestamp:
+                    rsi.build_rsi_data(timestamp[0])
+                    for instrument in self.params["instruments"]:
+                        self.logger.logger.info(
+                            f"Building RSI - {instrument} {timeframe} {timestamp[0]}")
+                        rsi.set_instrument_name(instrument)
+                        rsi.set_working_table_name(
+                            f"tbl_{self.params['data_source']}_"
+                            f"{instrument}_"
+                            f"{timeframe}_"
+                            f"summary")
+                        rsi.insert_rsi_data(instrument, timestamp[0])
 
         self.logger.logger.info("Finished - RSI")
+
+    def build_trend(self, timestamps):
+        self.logger.logger.info("Starting - Trends")
+        trend = Trend(self.db, self.trend_length_threshold, self.trends_status_rank)
+        trend.set_data_source(self.params["data_source"])
+
+        for instrument in self.params["instruments"]:
+            for timeframe in self.params["timeframes"]:
+                self.logger.logger.info(
+                    f"Building Trends - {instrument} {timeframe}")
+                trend.set_instrument_name(instrument)
+                trend.set_timeframe(timeframe)
+                trend.set_working_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}_"
+                    f"summary")
+
+                trend.reset_trends_fields_to_table()
+
+                # if timeframe == "1h":
+                #     for timestamp in timestamps.timestamp_ref_table_1h_timestamp:
+                #         print(f"Building Trends - {instrument} {timeframe} {timestamp[0]}")
+                #         trend.generate_trends(timestamp[0])
+
 
 
 if __name__ == "__main__":
@@ -248,7 +290,8 @@ if __name__ == "__main__":
     # h.build_fractal()
     # h.build_summary()
     # h.build_cluster()
-    h.build_rsi(timestamps)
+    # h.build_rsi(timestamps)
+    h.build_trend(timestamps)
 
     # print(timestamps.min_timestamp_1h)
     # print(timestamps.min_timestamp_d)

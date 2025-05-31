@@ -1,4 +1,5 @@
 import talib as ta
+import numpy as np
 
 from .DataFoundationBuilder import DataFoundationBuilder
 
@@ -57,33 +58,171 @@ class Trend(DataFoundationBuilder):
                         '{trend_params['overall_rank']}')
             """)
 
-    def _create_trends_table(self):
+    def reset_trends_fields_to_table(self):
         self.con.sql(f"""
-            CREATE TABLE {self.working_table_name}
-            (
-                instrument_name VARCHAR,
-                timeframe VARCHAR,
-                trend_id VARCHAR,
-                major_trend_slope_value DOUBLE,
-                trend_slope_value DOUBLE,
-                run_slope_value DOUBLE,
-                major_trend_slope_type VARCHAR,
-                trend_slope_type VARCHAR,
-                run_slope_type VARCHAR,
-                major_trend_to_trend VARCHAR,
-                trend_to_run VARCHAR,
-                status VARCHAR,
-                bias VARCHAR,
-                objective_status VARCHAR,
-                rank_bias VARCHAR,
-                rank_major_trend_to_trend VARCHAR,
-                rank_trend_to_run VARCHAR,
-                overall_rank VARCHAR
-            )
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS major_trend_slope_value
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS trend_slope_value
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS run_slope_value
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS trend_slope_value
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS run_slope_value
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS major_trend_slope_type
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS trend_slope_type
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS run_slope_type
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS major_trend_to_trend
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS trend_to_run
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS status
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS bias
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS objective_status
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS rank_bias
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS rank_major_trend_to_trend
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS rank_trend_to_run
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            DROP COLUMN IF EXISTS overall_rank
         """)
 
-    def set_working_table_name(self, working_table_name: str):
-        self.working_table_name = working_table_name
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS major_trend_slope_value DOUBLE
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS trend_slope_value DOUBLE
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS run_slope_value DOUBLE
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS run_slope_value DOUBLE
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS major_trend_slope_type VARCHAR
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS trend_slope_type VARCHAR
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS run_slope_type VARCHAR
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS major_trend_to_trend VARCHAR
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS trend_to_run VARCHAR
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS status VARCHAR
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS bias VARCHAR
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS objective_status VARCHAR
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS rank_bias VARCHAR
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS rank_major_trend_to_trend VARCHAR
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS rank_trend_to_run VARCHAR
+            """)
+
+        self.con.sql(f"""
+            ALTER TABLE {self.working_table_name}
+            ADD COLUMN IF NOT EXISTS overall_rank VARCHAR
+        """)
 
     def _append_instrument_trends(self,
                                   trend_id,
@@ -111,7 +250,21 @@ class Trend(DataFoundationBuilder):
             FROM trend_params
         """)
 
-    def generate_trends(self):
+    def get_table_from_db(self, table_name, timestamp, timestamps_back=2):
+
+        return self.con.sql(f"""
+            WITH timestamps AS (
+                SELECT timestamp FROM {table_name}
+                WHERE timestamp < '{timestamp}'
+                ORDER BY timestamp DESC
+                LIMIT {timestamps_back}
+            )
+            SELECT * FROM {table_name}
+            WHERE timestamp IN (SELECT timestamp FROM timestamps)
+        """)
+
+
+    def generate_trends(self, timestamp):
 
         run_length = self.trend_length_threshold["run_length"]
         trend_length = self.trend_length_threshold["trend_length"]
@@ -120,24 +273,28 @@ class Trend(DataFoundationBuilder):
         trend_threshold = self.trend_length_threshold["trend_threshold"]
         major_trend_threshold = self.trend_length_threshold["major_trend_threshold"]
 
-        data = self.get_table_from_db(self.source_table_name).fetchnumpy()
+        data = self.get_table_from_db(self.working_table_name, timestamp, 2)
 
-        close_prices = data['close']
-        high_prices = data['high']
-        low_prices = data['low']
+        atr = np.array(
+            self.con.sql(f"""
+                SELECT atr14 FROM {self.working_table_name}
+                WHERE timestamp = '{timestamp}'
+            """).fetchone()[0]
+        )
 
-        atr = ta.ATR(high_prices, low_prices, close_prices, 14)
+        sma_major_trend = np.array(data['sma9'].fetchall()).flatten()
+        sma_trend = np.array(data['sma20'].fetchall()).flatten()
+        sma_run = np.array(data['sma50'].fetchall()).flatten()
 
-        sma_major_trend = ta.SMA(close_prices, major_trend_length)
-        sma_trend = ta.SMA(close_prices, trend_length)
-        sma_run = ta.SMA(close_prices, run_length)
+        if len(sma_major_trend) < 2 or len(sma_trend) < 2 or len(sma_run) < 2:
+            return
 
-        slope_major_trend = round((ta.LINEARREG_SLOPE(
-            sma_major_trend, 2)[-1]/atr[-1])*100, 2)
-        slope_trend = round((ta.LINEARREG_SLOPE(
-            sma_trend, 2)[-1]/atr[-1])*100, 2)
-        slope_run = round((ta.LINEARREG_SLOPE(
-            sma_run, 2)[-1]/atr[-1])*100, 2)
+        slope_major_trend = ((ta.LINEARREG_SLOPE(
+            sma_major_trend, 2)/atr)*100)[-1]
+        slope_trend = ((ta.LINEARREG_SLOPE(
+            sma_trend, 2)/atr)*100)[-1]
+        slope_run = ((ta.LINEARREG_SLOPE(
+            sma_run, 2)/atr)*100)[-1]
 
         major_trend_slope_type = None
         trend_slope_type = None
@@ -160,7 +317,9 @@ class Trend(DataFoundationBuilder):
 
         trend_id = f"{major_trend_slope_type}{trend_slope_type}{run_slope_type}"
 
-        self._append_instrument_trends(trend_id,
-                                       slope_major_trend,
-                                       slope_trend,
-                                       slope_run)
+        # # self._append_instrument_trends(trend_id,
+        # #                                slope_major_trend,
+        # #                                slope_trend,
+        # #                                slope_run)
+
+        print(trend_id, slope_major_trend, slope_trend, slope_run)
