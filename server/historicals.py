@@ -107,7 +107,7 @@ class Historicals:
                     f"summary")
 
                 summary.create_summary_table()
-                # summary.delete_all_rows()
+                summary.delete_all_rows()
 
                 self.timestamps_in_raw_not_in_summary[f'{instrument}_{timeframe}'] = \
                     summary.get_timestamps_in_raw_not_in_summary()
@@ -255,6 +255,7 @@ class Historicals:
     def build_trend(self, timestamps):
         self.logger.logger.info("Starting - Trends")
         trend = Trend(self.db, self.trend_length_threshold, self.trends_status_rank)
+        trend.reset_params_table()
         trend.set_data_source(self.params["data_source"])
 
         for instrument in self.params["instruments"]:
@@ -271,11 +272,19 @@ class Historicals:
 
                 trend.reset_trends_fields_to_table()
 
-                # if timeframe == "1h":
-                #     for timestamp in timestamps.timestamp_ref_table_1h_timestamp:
-                #         print(f"Building Trends - {instrument} {timeframe} {timestamp[0]}")
-                #         trend.generate_trends(timestamp[0])
+                if timeframe == "1h":
+                    for timestamp in timestamps.timestamp_ref_table_1h_timestamp:
+                        print(f"Building Trends - {instrument} {timeframe} "
+                              f"{timestamp[0]}")
+                        trend.generate_trends(timestamp[0])
 
+                if timeframe == "d":
+                    for timestamp in timestamps.timestamp_ref_table_d_timestamp:
+                        print(f"Building Trends - {instrument} {timeframe} "
+                              f"{timestamp[0]}")
+                        trend.generate_trends(timestamp[0])
+
+        self.logger.logger.info("Finished - Trends")
 
 
 if __name__ == "__main__":

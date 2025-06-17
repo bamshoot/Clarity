@@ -13,11 +13,9 @@ class Trend(DataFoundationBuilder):
         self.trend_length_threshold = trend_length_threshold
         self.trends_status_rank = trends_status_rank
 
-    def reset_trends_table(self):
+    def reset_params_table(self):
         self.drop_table(self.params_table_name)
-        self.drop_table(self.working_table_name)
         self._create_trend_params_table_from_json()
-        self._create_trends_table()
 
     def _create_trend_params_table_from_json(self):
 
@@ -225,29 +223,77 @@ class Trend(DataFoundationBuilder):
         """)
 
     def _append_instrument_trends(self,
+                                  timestamp,
                                   trend_id,
                                   major_trend_slope_value,
                                   trend_slope_value,
                                   run_slope_value):
         self.con.sql(f"""
-            WITH trend_params AS (
-                SELECT major_trend_slope_type, trend_slope_type, run_slope_type,
-                       major_trend_to_trend, trend_to_run, status, bias,
-                       objective_status, rank_bias, rank_major_trend_to_trend,
-                       rank_trend_to_run, overall_rank
-                FROM tbl_trend_params
-                WHERE trend_id = '{trend_id}'
-            )
-            INSERT INTO {self.working_table_name}
-            SELECT '{self.instrument_name}' as instrument_name,
-                   '{self.timeframe}' as timeframe,
-                   '{trend_id}' as trend_id,
-                   {major_trend_slope_value}, {trend_slope_value}, {run_slope_value},
-                   major_trend_slope_type, trend_slope_type, run_slope_type,
-                   major_trend_to_trend, trend_to_run, status, bias,
-                   objective_status, rank_bias, rank_major_trend_to_trend,
-                   rank_trend_to_run, overall_rank
-            FROM trend_params
+            UPDATE {self.working_table_name}
+            SET major_trend_slope_value = {major_trend_slope_value},
+                trend_slope_value = {trend_slope_value},
+                run_slope_value = {run_slope_value},
+                major_trend_slope_type = (
+                    SELECT major_trend_slope_type
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                ),
+                trend_slope_type = (
+                    SELECT trend_slope_type
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                ),
+                run_slope_type = (
+                    SELECT run_slope_type
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                ),
+                major_trend_to_trend = (
+                    SELECT major_trend_to_trend
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                ),
+                trend_to_run = (
+                    SELECT trend_to_run
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                ),
+                status = (
+                    SELECT status
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                ),
+                bias = (
+                    SELECT bias
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                ),
+                objective_status = (
+                    SELECT objective_status
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                ),
+                rank_bias = (
+                    SELECT rank_bias
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                ),
+                rank_major_trend_to_trend = (
+                    SELECT rank_major_trend_to_trend
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                ),
+                rank_trend_to_run = (
+                    SELECT rank_trend_to_run
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                ),
+                overall_rank = (
+                    SELECT overall_rank
+                    FROM tbl_trend_params
+                    WHERE trend_id = '{trend_id}'
+                )
+            WHERE timestamp = '{timestamp}'
         """)
 
     def get_table_from_db(self, table_name, timestamp, timestamps_back=2):
@@ -263,38 +309,62 @@ class Trend(DataFoundationBuilder):
             WHERE timestamp IN (SELECT timestamp FROM timestamps)
         """)
 
-
     def generate_trends(self, timestamp):
 
-        run_length = self.trend_length_threshold["run_length"]
-        trend_length = self.trend_length_threshold["trend_length"]
-        major_trend_length = self.trend_length_threshold["major_trend_length"]
         run_threshold = self.trend_length_threshold["run_threshold"]
         trend_threshold = self.trend_length_threshold["trend_threshold"]
         major_trend_threshold = self.trend_length_threshold["major_trend_threshold"]
 
-        data = self.get_table_from_db(self.working_table_name, timestamp, 2)
+        historical_data = self.con.sql(f"""
+            SELECT atr14, sma9, sma20, sma50 FROM {self.working_table_name}
+            WHERE timestamp <= '{timestamp}'
+            ORDER BY timestamp DESC
+            LIMIT 2
+        """).fetchall()
 
-        atr = np.array(
-            self.con.sql(f"""
-                SELECT atr14 FROM {self.working_table_name}
-                WHERE timestamp = '{timestamp}'
-            """).fetchone()[0]
-        )
+        if len(historical_data) < 2:
+            return
 
-        sma_major_trend = np.array(data['sma9'].fetchall()).flatten()
-        sma_trend = np.array(data['sma20'].fetchall()).flatten()
-        sma_run = np.array(data['sma50'].fetchall()).flatten()
+        historical_data = list(reversed(historical_data))
+
+        atr = np.array([row[0] for row in historical_data])
+        sma_major_trend = np.array([row[1] for row in historical_data])
+        sma_trend = np.array([row[2] for row in historical_data])
+        sma_run = np.array([row[3] for row in historical_data])
+
+        print(f"Debug - ATR: {atr}, SMA9: {sma_major_trend}, "
+              f"SMA20: {sma_trend}, SMA50: {sma_run}")
 
         if len(sma_major_trend) < 2 or len(sma_trend) < 2 or len(sma_run) < 2:
             return
 
+        # Check for zero or invalid ATR values
+        current_atr = atr[-1]
+        if current_atr <= 0 or np.isnan(current_atr):
+            print(f"Invalid ATR value: {current_atr}, skipping trend calculation")
+            return
+
+        # Check for invalid SMA values
+        if (np.any(np.isnan(sma_major_trend)) or
+                np.any(np.isnan(sma_trend)) or
+                np.any(np.isnan(sma_run))):
+            print("Invalid SMA values detected, skipping trend calculation")
+            return
+
         slope_major_trend = ((ta.LINEARREG_SLOPE(
-            sma_major_trend, 2)/atr)*100)[-1]
+            sma_major_trend, 2)/current_atr)*100)[-1]
         slope_trend = ((ta.LINEARREG_SLOPE(
-            sma_trend, 2)/atr)*100)[-1]
+            sma_trend, 2)/current_atr)*100)[-1]
         slope_run = ((ta.LINEARREG_SLOPE(
-            sma_run, 2)/atr)*100)[-1]
+            sma_run, 2)/current_atr)*100)[-1]
+
+        # Validate slope calculations
+        if (np.isnan(slope_major_trend) or
+                np.isnan(slope_trend) or
+                np.isnan(slope_run)):
+            print(f"Invalid slope values: major={slope_major_trend}, "
+                  f"trend={slope_trend}, run={slope_run}")
+            return
 
         major_trend_slope_type = None
         trend_slope_type = None
@@ -317,9 +387,12 @@ class Trend(DataFoundationBuilder):
 
         trend_id = f"{major_trend_slope_type}{trend_slope_type}{run_slope_type}"
 
-        # # self._append_instrument_trends(trend_id,
-        # #                                slope_major_trend,
-        # #                                slope_trend,
-        # #                                slope_run)
+        print(f"Trend ID: {trend_id}, Slopes: major={slope_major_trend:.4f}, "
+              f"trend={slope_trend:.4f}, run={slope_run:.4f}")
 
-        print(trend_id, slope_major_trend, slope_trend, slope_run)
+        # Insert to database - "None" is a valid slope type for consolidation
+        self._append_instrument_trends(timestamp,
+                                       trend_id,
+                                       slope_major_trend,
+                                       slope_trend,
+                                       slope_run)
