@@ -9,6 +9,7 @@ from database.db import DB
 from config.config import Config
 from utils.logger import Logger
 import time
+from indicators.CandlePattern import CandlePattern
 
 
 class Historicals:
@@ -107,7 +108,7 @@ class Historicals:
                     f"summary")
 
                 summary.create_summary_table()
-                summary.delete_all_rows()
+                # summary.delete_all_rows()
 
                 self.timestamps_in_raw_not_in_summary[f'{instrument}_{timeframe}'] = \
                     summary.get_timestamps_in_raw_not_in_summary()
@@ -286,6 +287,76 @@ class Historicals:
 
         self.logger.logger.info("Finished - Trends")
 
+    def build_candle_pattern(self, timestamps):
+        self.logger.logger.info("Starting - Candle Pattern")
+        candle_pattern = CandlePattern(self.db, self.candle_patterns)
+        candle_pattern.set_data_source(self.params["data_source"])
+
+        # Set up the parameters table
+        candle_pattern.set_candle_pattern_params_table_name(
+            "tbl_candle_patterns_params")
+        candle_pattern.reset_candle_pattern_params_table()
+
+        for instrument in self.params["instruments"]:
+            for timeframe in self.params["timeframes"]:
+                self.logger.logger.info(
+                    f"Building Candle Pattern - {instrument} {timeframe}")
+
+                candle_pattern.set_instrument_name(instrument)
+                candle_pattern.set_timeframe(timeframe)
+
+                candle_pattern.set_source_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}")
+
+                candle_pattern.set_working_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}_"
+                    f"candle_patterns")
+
+                candle_pattern.set_last_n_rows_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}_"
+                    f"candle_patterns_last_n_rows")
+
+                # Generate candle pattern data for all timestamps
+                candle_pattern.reset_candle_pattern_table()
+                candle_pattern.generate_candle_patterns()
+
+                # Add candle pattern fields to summary table
+                candle_pattern.set_summary_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}_"
+                    f"summary")
+                candle_pattern.add_candle_pattern_fields_to_summary_table()
+
+                # Process each timestamp
+                if timeframe == "1h":
+                    for timestamp in timestamps.timestamp_ref_table_1h_timestamp:
+                        print(f"Building Candle Pattern - {instrument} {timeframe} "
+                              f"{timestamp[0]}")
+                        candle_pattern.reset_candle_pattern_last_n_rows()
+                        candle_pattern.generate_candle_pattern_last_n_rows(
+                            10, timestamp[0])
+                        candle_pattern.generate_candle_pattern_aggregated_data_for_timestamp(
+                            timestamp[0])
+
+                if timeframe == "d":
+                    for timestamp in timestamps.timestamp_ref_table_d_timestamp:
+                        print(f"Building Candle Pattern - {instrument} {timeframe} "
+                              f"{timestamp[0]}")
+                        candle_pattern.reset_candle_pattern_last_n_rows()
+                        candle_pattern.generate_candle_pattern_last_n_rows(
+                            10, timestamp[0])
+                        candle_pattern.generate_candle_pattern_aggregated_data_for_timestamp(
+                            timestamp[0])
+
+        self.logger.logger.info("Finished - Candle Pattern")
+
 
 if __name__ == "__main__":
     start_time = time.time()
@@ -298,9 +369,10 @@ if __name__ == "__main__":
     # h.build_source_prep()
     # h.build_fractal()
     # h.build_summary()
-    # h.build_cluster()
+    h.build_cluster()
     # h.build_rsi(timestamps)
-    h.build_trend(timestamps)
+    # h.build_trend(timestamps)
+    # h.build_candle_pattern(timestamps)
 
     # print(timestamps.min_timestamp_1h)
     # print(timestamps.min_timestamp_d)

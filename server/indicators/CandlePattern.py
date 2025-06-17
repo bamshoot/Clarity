@@ -10,6 +10,7 @@ class CandlePattern(DataFoundationBuilder):
         self.candle_pattern_params_table_name = None
         self.last_n_rows_table_name = None
         self.last_n_aggregated_table_name = None
+        self.summary_table_name = None
 
     def set_candle_pattern_params_table_name(
             self, candle_pattern_params_table_name: str):
@@ -20,6 +21,9 @@ class CandlePattern(DataFoundationBuilder):
 
     def set_last_n_aggregated_table_name(self, last_n_aggregated_table_name: str):
         self.last_n_aggregated_table_name = last_n_aggregated_table_name
+
+    def set_summary_table_name(self, summary_table_name: str):
+        self.summary_table_name = summary_table_name
 
     def reset_candle_pattern_params_table(self):
         self.drop_table(self.candle_pattern_params_table_name)
@@ -35,6 +39,53 @@ class CandlePattern(DataFoundationBuilder):
     def reset_candle_pattern_last_n_rows(self):
         self.drop_table(self.last_n_rows_table_name)
         self._create_candle_pattern_last_n_rows()
+
+    def add_candle_pattern_fields_to_summary_table(self):
+        """Add candle pattern aggregation fields to the summary table"""
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS reversal INTEGER
+            """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS indecisive INTEGER
+            """)
+        self.con.sql(f"""
+            ALTER TABLE {self.summary_table_name}
+            ADD COLUMN IF NOT EXISTS continuation INTEGER
+            """)
+
+    def generate_candle_pattern_aggregated_data_for_timestamp(
+            self, timestamp):
+        """Generate aggregated candle pattern data for a timestamp"""
+        # First, ensure we have the last n rows data
+        if hasattr(self, 'last_n_rows_table_name'):
+            # Calculate aggregated values
+            result = self.con.sql(f"""
+                SELECT
+                    SUM(CASE WHEN type = 'reversal'
+                             THEN "sum"
+                             ELSE 0 END) as reversal,
+                    SUM(CASE WHEN type = 'indecisive'
+                             THEN "sum"
+                             ELSE 0 END) as indecisive,
+                    SUM(CASE WHEN type = 'continuation'
+                             THEN "sum"
+                             ELSE 0 END) as continuation
+                FROM {self.last_n_rows_table_name}
+            """).fetchone()
+
+            if result:
+                reversal, indecisive, continuation = result
+
+                # Update the summary table for this timestamp
+                self.con.sql(f"""
+                    UPDATE {self.summary_table_name}
+                    SET reversal = {reversal or 0},
+                        indecisive = {indecisive or 0},
+                        continuation = {continuation or 0}
+                    WHERE timestamp = '{timestamp}'
+                """)
 
     def _create_candle_pattern_params_table(self):
         self.con.sql(f"""
@@ -189,7 +240,12 @@ class CandlePattern(DataFoundationBuilder):
 
         self.con.execute("DROP TABLE IF EXISTS temp_insert")
 
-    def generate_candle_pattern_last_n_rows(self, n: int):
+    def generate_candle_pattern_last_n_rows(self, n: int, timestamp=None):
+        # If no timestamp is provided, use the original behavior (last n rows)
+        timestamp_filter = ""
+        if timestamp:
+            timestamp_filter = f"WHERE timestamp <= '{timestamp}'"
+
         self.con.sql(f"""
            WITH latest_patterns AS (
                 SELECT
@@ -256,6 +312,7 @@ class CandlePattern(DataFoundationBuilder):
                     , CDLUPSIDEGAP2CROWS
                     , CDLXSIDEGAP3METHODS
                 FROM {self.working_table_name}
+                {timestamp_filter}
                 ORDER BY timestamp DESC
                 LIMIT {n}
             ),
