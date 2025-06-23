@@ -28,7 +28,7 @@ class Config:
             "OANDA_INSTRUMENTS": "config/settings/oanda_instruments.json",
             "OANDA_TRADE": "config/settings/oanda_trade.json",
             "EOD_INSTRUMENTS": "config/settings/eod_instruments.json",
-            "EOD_MnTrd_PARAMS": "config/settings/eod_manual_trading_params_test.json",
+            "EOD_MnTrd_PARAMS": "config/settings/eod_manual_trading_params.json",
             "Candle_Patterns": "config/settings/candle_patterns.json",
             "Trends_Status_Rank": "config/settings/trend_status_rank.json",
             "Trends_Length_Threshold": "config/settings/trend_length_threshold.json",

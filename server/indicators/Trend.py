@@ -332,19 +332,14 @@ class Trend(DataFoundationBuilder):
         sma_trend = np.array([row[2] for row in historical_data])
         sma_run = np.array([row[3] for row in historical_data])
 
-        print(f"Debug - ATR: {atr}, SMA9: {sma_major_trend}, "
-              f"SMA20: {sma_trend}, SMA50: {sma_run}")
-
         if len(sma_major_trend) < 2 or len(sma_trend) < 2 or len(sma_run) < 2:
             return
 
-        # Check for zero or invalid ATR values
         current_atr = atr[-1]
         if current_atr <= 0 or np.isnan(current_atr):
             print(f"Invalid ATR value: {current_atr}, skipping trend calculation")
             return
 
-        # Check for invalid SMA values
         if (np.any(np.isnan(sma_major_trend)) or
                 np.any(np.isnan(sma_trend)) or
                 np.any(np.isnan(sma_run))):
@@ -358,7 +353,6 @@ class Trend(DataFoundationBuilder):
         slope_run = ((ta.LINEARREG_SLOPE(
             sma_run, 2)/current_atr)*100)[-1]
 
-        # Validate slope calculations
         if (np.isnan(slope_major_trend) or
                 np.isnan(slope_trend) or
                 np.isnan(slope_run)):
@@ -387,10 +381,6 @@ class Trend(DataFoundationBuilder):
 
         trend_id = f"{major_trend_slope_type}{trend_slope_type}{run_slope_type}"
 
-        print(f"Trend ID: {trend_id}, Slopes: major={slope_major_trend:.4f}, "
-              f"trend={slope_trend:.4f}, run={slope_run:.4f}")
-
-        # Insert to database - "None" is a valid slope type for consolidation
         self._append_instrument_trends(timestamp,
                                        trend_id,
                                        slope_major_trend,

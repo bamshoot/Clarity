@@ -1,7 +1,8 @@
 {
     "data_source": "EOD",
-    "instruments": ["EURUSD", "GBPUSD"],
-    "timeframes": ["1h", "d"],
+    "instruments": [
+        "EURUSD"],
+    "timeframes": ["1h"],
     "max_bars": 730,
     "candle_price_point": "close",
     "fractal_period": 2,
