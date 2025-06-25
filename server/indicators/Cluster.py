@@ -1,4 +1,6 @@
 import kmeans1d
+from collections import Counter
+import pandas as pd
 
 from .DataFoundationBuilder import DataFoundationBuilder
 
@@ -11,632 +13,282 @@ class Cluster(DataFoundationBuilder):
                  outlier_threshold: float,
                  candle_price_point: str):
         super().__init__(db_connection)
-        self.sr_table_name = None
-        self.fractal_period = None
         self.max_bars = max_bars
         self.window_position = None
         self.timestamp = None
         self.date = None
         self.datetime = None
         self.cluster_count = cluster_count
-        self.outlier_threshold = outlier_threshold
         self.candle_price_point = candle_price_point
+        self.summary_table_name = None
         self.threshold = None
         self.last_close = None
+        self.mxTimestamp = None
+        self.mnTimestamp = None
+        self.result_df = None
 
-    def create_cluster_table(self):
+    def set_summary_table_name(self, summary_table_name: str):
+        self.summary_table_name = summary_table_name
+
+    def get_fractal_timestamps(self):
+        return self.con.sql(f"""
+            SELECT timestamp
+            FROM {self.source_table_name}
+            ORDER BY timestamp ASC
+        """).fetchall()
+
+    def _set_fractal_timestamps(self, mxTimestamp, mnTimestamp):
+        self.mxTimestamp = mxTimestamp
+        self.mnTimestamp = mnTimestamp
+
+    def set_window_position(self, index: int):
+        self.window_position = index
+
+    def _create_cluster_table(self):
+
         self.con.sql(f"""
             CREATE TABLE {self.working_table_name} AS
                 SELECT *
                 FROM {self.source_table_name}
-                ORDER BY datetime DESC
-                LIMIT {self.max_bars}
-                OFFSET {self.window_position}
         """)
+
         self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN k INTEGER
+            DELETE FROM {self.working_table_name}
         """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN o DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN clust INTEGER
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN cent DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN centDist DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN centDistMean DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN centDistMeanInv DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN centDistLstCandle DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN centCount DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN centDistMeanRank DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN centCountRank DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN centDistLstCandleRank DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN score DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.working_table_name}
-            ADD COLUMN overallRank DOUBLE
-        """)
+
+        columns = [
+            'k INTEGER',
+            'o DOUBLE',
+            'lstClose DOUBLE',
+            'clust INTEGER',
+            'cent DOUBLE',
+            'centDist DOUBLE',
+            'centDistMean DOUBLE',
+            'centDistMeanInv DOUBLE',
+            'centDistLstClose DOUBLE',
+            'centCount DOUBLE',
+            'centDistMeanRank DOUBLE',
+            'centCountRank DOUBLE',
+            'centDistLstCloseRank DOUBLE',
+            'score DOUBLE',
+            'overallRank DOUBLE'
+        ]
+
+        for column_def in columns:
+            self.con.sql(f"""
+                ALTER TABLE {self.working_table_name}
+                ADD COLUMN {column_def}
+            """)
 
     def reset_table(self):
         self.drop_table(self.working_table_name)
-        self.create_cluster_table()
+        self._create_cluster_table()
 
     def add_columns_to_summary_table(self):
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_p1 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_p1 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_n1 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_n1 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_p2 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_p2 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_n2 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_n2 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_p3 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_p3 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_n3 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_n3 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_p4 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_p4 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_n4 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_n4 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_p5 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_p5 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_n5 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_n5 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_p6 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_p6 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_n6 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_n6 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_p7 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_p7 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_n7 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_n7 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_p8 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_p8 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_n8 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_n8 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_p9 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_p9 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_n9 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_n9 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_p10 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_p10 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS cent_n10 DOUBLE
-        """)
-        self.con.sql(f"""
-            ALTER TABLE {self.summary_table_name}
-            ADD COLUMN IF NOT EXISTS overallRank_n10 DOUBLE
-        """)
+        columns = []
 
-    def set_sr_table_name(self, sr_table_name: str):
-        self.sr_table_name = sr_table_name
+        for i in range(1, 11):
+            columns.extend([
+                f'cent_p{i} DOUBLE',
+                f'overallRank_p{i} DOUBLE',
+                f'cent_n{i} DOUBLE',
+                f'overallRank_n{i} DOUBLE'
+            ])
 
-    def set_fractal_period(self, fractal_period: int):
-        self.fractal_period = fractal_period
+        for column_def in columns:
+            self.con.sql(f"""
+                ALTER TABLE {self.summary_table_name}
+                ADD COLUMN IF NOT EXISTS {column_def}
+            """)
 
-    def set_window_position(self, window_position: int):
-        self.window_position = window_position
+    def count_cluster_occurrences(self, clusters):
+        """Count occurrences of each cluster"""
+        cluster_counts = Counter(clusters)
+        return dict(cluster_counts)
 
-    def set_indicator_data(self):
-        self.timestamp = self.con.sql(f"""
-            SELECT timestamp
-            FROM {self.working_table_name}
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """).fetchone()[0]
+    def create_cluster_summary_df(self, clusters, centroids, close):
+        """Create a DataFrame with cluster, centroid, and count columns"""
+        cluster_counts = self.count_cluster_occurrences(clusters)
 
-        self.date = self.con.sql(f"""
-            SELECT date
-            FROM {self.working_table_name}
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """).fetchone()[0]
+        cluster_data = []
+        for cluster_id in range(len(centroids)):
+            count = cluster_counts.get(cluster_id, 0)
+            centDist = centroids[cluster_id] - close
+            centDistAbs = abs(centroids[cluster_id] - close)
+            centDistMean = abs(centroids[cluster_id] - close) / count
+            centDistMeanInv = 1 / centDistMean
+            centDistLstClose = centroids[cluster_id] - close
+            score = count * centDistMeanInv
 
-        self.datetime = self.con.sql(f"""
-            SELECT datetime
-            FROM {self.working_table_name}
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """).fetchone()[0]
+            cluster_data.append({
+                'cluster': cluster_id,
+                'centroid': centroids[cluster_id],
+                'count': count,
+                'lstClose': close,
+                'centDist': centDist,
+                'centDistAbs': centDistAbs,
+                'centDistMean': centDistMean,
+                'centDistMeanInv': centDistMeanInv,
+                'centDistLstClose': centDistLstClose,
+                'score': score
+            })
 
-        self.last_close = self.con.sql(f"""
-            SELECT close
-            FROM {self.working_table_name}
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """).fetchone()[0]
-
-    def set_threshold(self):
-        self.threshold = self.con.sql(f"""
-            SELECT (MAX(close) - MIN(close)) * {self.outlier_threshold}
-            FROM {self.source_table_name}
-        """).fetchone()[0]
-
-    def generate_input_data(self):
-        self.con.sql(f"""
-            UPDATE {self.working_table_name}
-            SET k = {self.cluster_count}
-        """)
-
-        self.con.sql(f"""
-            UPDATE {self.working_table_name}
-            SET o = {self.outlier_threshold}
-        """)
+        return pd.DataFrame(cluster_data)
 
     def generate_cluster_data(self):
         df = self.con.sql(f"""
             SELECT *
-            FROM {self.working_table_name}
+            FROM {self.source_table_name}
+            ORDER BY datetime ASC
+            LIMIT {self.max_bars}
+            OFFSET {self.window_position}
         """).to_df()
+
+        df = df[df[self.candle_price_point] <=
+                df[self.candle_price_point].quantile(0.95)]
+        df = df[df[self.candle_price_point] >=
+                df[self.candle_price_point].quantile(0.05)]
 
         clusters, centroids = kmeans1d.cluster(df[self.candle_price_point],
                                                self.cluster_count)
 
-        cent_clust = [centroids[clust] for clust in clusters]
+        close = df[self.candle_price_point].iloc[-1]
 
-        df['cent'] = cent_clust
-        df['clust'] = clusters
+        cluster_summary_df = self.create_cluster_summary_df(clusters, centroids, close)
 
-        self.con.execute(f"DROP TABLE IF EXISTS {self.working_table_name}")
-        self.con.execute(f"""
-            CREATE TABLE {self.working_table_name} AS
-            SELECT * FROM df
-        """)
+        cluster_summary_df['centDistMeanRank'] = (
+            cluster_summary_df['centDistMean'].rank(method='min', ascending=True)
+        )
+        cluster_summary_df['centCountRank'] = (
+            cluster_summary_df['count'].rank(method='min', ascending=False)
+        )
+        cluster_summary_df['overallRank'] = (
+            cluster_summary_df['centDistMeanRank'] + cluster_summary_df['centCountRank']
+        ) / 2
 
-    def generate_cent_dist(self):
-        self.con.sql(f"""
-            UPDATE {self.working_table_name}
-            SET centDist = abs(cent - close)
-        """)
+        pos_df = cluster_summary_df[cluster_summary_df['centDistLstClose'] > 0].copy()
+        neg_df = cluster_summary_df[cluster_summary_df['centDistLstClose'] < 0].copy()
 
-        self.con.sql(f"""
-            UPDATE {self.working_table_name}
-            SET centDistMean = sub.cent_dist_mean,
-                centDistMeanInv = sub.cent_dist_mean_inv
-            FROM (
-                SELECT
-                    datetime,
-                    AVG(centDist) OVER (PARTITION BY clust) as cent_dist_mean,
-                    AVG(1 / centDist) OVER (PARTITION BY clust) as cent_dist_mean_inv
-                FROM {self.working_table_name}
-            ) sub
-            WHERE {self.working_table_name}.datetime = sub.datetime
-        """)
-
-    def remove_outliers(self):
-        self.con.sql(f"""
-            CREATE TABLE {self.working_table_name}_temp AS
-            SELECT * FROM {self.working_table_name}
-            WHERE centDist <= {self.threshold}
-        """)
-
-        self.drop_table(self.working_table_name)
-
-        self.con.sql(f"""
-            CREATE TABLE {self.working_table_name} AS
-            SELECT * FROM {self.working_table_name}_temp
-        """)
-
-        self.drop_table(f"{self.working_table_name}_temp")
-
-    def generate_cent_dist_lst_candle(self):
-        self.con.sql(f"""
-            UPDATE {self.working_table_name}
-            SET centDistLstCandle = cent - lstCandlePrice
-        """)
-
-    def generate_cent_count(self):
-        self.con.sql(f"""
-            UPDATE {self.working_table_name}
-            SET centCount = sub.cnt,
-            FROM (
-                SELECT
-                    datetime,
-                    COUNT(*) OVER (PARTITION BY clust) as cnt,
-                FROM {self.working_table_name}
-            ) sub
-            WHERE {self.working_table_name}.datetime = sub.datetime
-        """)
-
-    def generate_score(self):
-        self.con.sql(f"""
-            UPDATE {self.working_table_name}
-            SET score = (centCount * centDistMeanInv)
-        """)
-
-    def generate_rank(self):
-        self.con.sql(f"""
-            UPDATE {self.working_table_name}
-            SET centDistMeanRank = sub.cent_dist_mean_rank,
-                centCountRank = sub.cent_count_rank
-            FROM (
-                SELECT
-                    datetime,
-                    DENSE_RANK() OVER (
-                        ORDER BY centDistMean ASC) as cent_dist_mean_rank,
-                    DENSE_RANK() OVER (
-                        ORDER BY centCount DESC) as cent_count_rank,
-                FROM {self.working_table_name}
-            ) sub
-            WHERE {self.working_table_name}.datetime = sub.datetime
-        """)
-
-        self.con.sql(f"""
-            WITH pos AS (
-                SELECT
-                    datetime,
-                    /* Rank positive values by ascending |centDistLstCandle| */
-                    DENSE_RANK() OVER (ORDER BY ABS(centDistLstCandle)) AS rank_val
-                FROM {self.working_table_name}
-                WHERE centDistLstCandle > 0
-            ),
-            neg AS (
-                SELECT
-                    datetime,
-                    /* Rank negative values by ascending |centDistLstCandle|,
-                    then make it negative */
-                    -DENSE_RANK() OVER (ORDER BY ABS(centDistLstCandle)) AS rank_val
-                FROM {self.working_table_name}
-                WHERE centDistLstCandle < 0
-            ),
-            all_ranks AS (
-                /* Combine positive and negative ranks into one resultset */
-                SELECT datetime, rank_val AS cent_dist_lst_candle_rank FROM pos
-                UNION ALL
-                SELECT datetime, rank_val AS cent_dist_lst_candle_rank FROM neg
+        if not pos_df.empty:
+            pos_df['centDistLstCloseRank'] = pos_df['centDistLstClose'].abs().rank(
+                method='dense', ascending=True
             )
-            UPDATE {self.working_table_name}
-            SET centDistLstCandleRank = all_ranks.cent_dist_lst_candle_rank
-            FROM all_ranks
-            WHERE {self.working_table_name}.datetime = all_ranks.datetime;
-        """)
 
-        self.con.sql(f"""
-            UPDATE {self.working_table_name}
-            SET overallRank = (centDistMeanRank + centCountRank) / 2
-        """)
-
-    def generate_historical_sr(self):
-        self.con.sql(f"""
-            WITH base_data AS (
-                SELECT DISTINCT
-                    '{self.instrument_name}' AS instrument_name,
-                    '{self.timeframe}' AS timeframe,
-                    {self.timestamp} AS timestamp,
-                    '{self.datetime}' AS datetime,
-                    {self.last_close} AS close
-                FROM {self.working_table_name}
-            ),
-            rank_data AS (
-                SELECT
-                    {self.timestamp} AS timestamp,
-                    centDistLstCandleRank,
-                    cent,
-                    overallRank
-                FROM {self.working_table_name}
-            ),
-            pivoted AS (
-                SELECT
-                    timestamp,
-                    MAX(CASE WHEN centDistLstCandleRank=1
-                        THEN cent END) AS cent_p1,
-                    MAX(CASE WHEN centDistLstCandleRank=1
-                        THEN overallRank END) AS overallRank_p1,
-                    MAX(CASE WHEN centDistLstCandleRank=-1
-                        THEN cent END) AS cent_n1,
-                    MAX(CASE WHEN centDistLstCandleRank=-1
-                        THEN overallRank END) AS overallRank_n1,
-                    MAX(CASE WHEN centDistLstCandleRank=2
-                        THEN cent END) AS cent_p2,
-                    MAX(CASE WHEN centDistLstCandleRank=2
-                        THEN overallRank END) AS overallRank_p2,
-                    MAX(CASE WHEN centDistLstCandleRank=-2
-                        THEN cent END) AS cent_n2,
-                    MAX(CASE WHEN centDistLstCandleRank=-2
-                        THEN overallRank END) AS overallRank_n2,
-                    MAX(CASE WHEN centDistLstCandleRank=3
-                        THEN cent END) AS cent_p3,
-                    MAX(CASE WHEN centDistLstCandleRank=3
-                        THEN overallRank END) AS overallRank_p3,
-                    MAX(CASE WHEN centDistLstCandleRank=-3
-                        THEN cent END) AS cent_n3,
-                    MAX(CASE WHEN centDistLstCandleRank=-3
-                        THEN overallRank END) AS overallRank_n3,
-                    MAX(CASE WHEN centDistLstCandleRank=4
-                        THEN cent END) AS cent_p4,
-                    MAX(CASE WHEN centDistLstCandleRank=4
-                        THEN overallRank END) AS overallRank_p4,
-                    MAX(CASE WHEN centDistLstCandleRank=-4
-                        THEN cent END) AS cent_n4,
-                    MAX(CASE WHEN centDistLstCandleRank=-4
-                        THEN overallRank END) AS overallRank_n4,
-                    MAX(CASE WHEN centDistLstCandleRank=5
-                        THEN cent END) AS cent_p5,
-                    MAX(CASE WHEN centDistLstCandleRank=5
-                        THEN overallRank END) AS overallRank_p5,
-                    MAX(CASE WHEN centDistLstCandleRank=-5
-                        THEN cent END) AS cent_n5,
-                    MAX(CASE WHEN centDistLstCandleRank=-5
-                        THEN overallRank END) AS overallRank_n5,
-                    MAX(CASE WHEN centDistLstCandleRank=6
-                        THEN cent END) AS cent_p6,
-                    MAX(CASE WHEN centDistLstCandleRank=6
-                        THEN overallRank END) AS overallRank_p6,
-                    MAX(CASE WHEN centDistLstCandleRank=-6
-                        THEN cent END) AS cent_n6,
-                    MAX(CASE WHEN centDistLstCandleRank=-6
-                        THEN overallRank END) AS overallRank_n6,
-                    MAX(CASE WHEN centDistLstCandleRank=7
-                        THEN cent END) AS cent_p7,
-                    MAX(CASE WHEN centDistLstCandleRank=7
-                        THEN overallRank END) AS overallRank_p7,
-                    MAX(CASE WHEN centDistLstCandleRank=-7
-                        THEN cent END) AS cent_n7,
-                    MAX(CASE WHEN centDistLstCandleRank=-7
-                        THEN overallRank END) AS overallRank_n7,
-                    MAX(CASE WHEN centDistLstCandleRank=8
-                        THEN cent END) AS cent_p8,
-                    MAX(CASE WHEN centDistLstCandleRank=8
-                        THEN overallRank END) AS overallRank_p8,
-                    MAX(CASE WHEN centDistLstCandleRank=-8
-                        THEN cent END) AS cent_n8,
-                    MAX(CASE WHEN centDistLstCandleRank=-8
-                        THEN overallRank END) AS overallRank_n8,
-                    MAX(CASE WHEN centDistLstCandleRank=9
-                        THEN cent END) AS cent_p9,
-                    MAX(CASE WHEN centDistLstCandleRank=9
-                        THEN overallRank END) AS overallRank_p9,
-                    MAX(CASE WHEN centDistLstCandleRank=-9
-                        THEN cent END) AS cent_n9,
-                    MAX(CASE WHEN centDistLstCandleRank=-9
-                        THEN overallRank END) AS overallRank_n9,
-                    MAX(CASE WHEN centDistLstCandleRank=10
-                        THEN cent END) AS cent_p10,
-                    MAX(CASE WHEN centDistLstCandleRank=10
-                        THEN overallRank END) AS overallRank_p10,
-                    MAX(CASE WHEN centDistLstCandleRank=-10
-                        THEN cent END) AS cent_n10,
-                    MAX(CASE WHEN centDistLstCandleRank=-10
-                        THEN overallRank END) AS overallRank_n10
-                FROM rank_data
-                GROUP BY timestamp
-            ),
-            cent_data AS (
-                SELECT
-                    b.timestamp,
-                    p.cent_p1,
-                    p.overallRank_p1,
-                    p.cent_n1,
-                    p.overallRank_n1,
-                    p.cent_p2,
-                    p.overallRank_p2,
-                    p.cent_n2,
-                    p.overallRank_n2,
-                    p.cent_p3,
-                    p.overallRank_p3,
-                    p.cent_n3,
-                    p.overallRank_n3,
-                    p.cent_p4,
-                    p.overallRank_p4,
-                    p.cent_n4,
-                    p.overallRank_n4,
-                    p.cent_p5,
-                    p.overallRank_p5,
-                    p.cent_n5,
-                    p.overallRank_n5,
-                    p.cent_p6,
-                    p.overallRank_p6,
-                    p.cent_n6,
-                    p.overallRank_n6,
-                    p.cent_p7,
-                    p.overallRank_p7,
-                    p.cent_n7,
-                    p.overallRank_n7,
-                    p.cent_p8,
-                    p.overallRank_p8,
-                    p.cent_n8,
-                    p.overallRank_n8,
-                    p.cent_p9,
-                    p.overallRank_p9,
-                    p.cent_n9,
-                    p.overallRank_n9,
-                    p.cent_p10,
-                    p.overallRank_p10,
-                    p.cent_n10,
-                    p.overallRank_n10
-                FROM base_data b
-                LEFT JOIN pivoted p
-                ON b.timestamp = p.timestamp
+        if not neg_df.empty:
+            neg_df['centDistLstCloseRank'] = -neg_df['centDistLstClose'].abs().rank(
+                method='dense', ascending=True
             )
-            UPDATE {self.summary_table_name}
-            SET cent_p1 = cent_data.cent_p1,
-                overallRank_p1 = cent_data.overallRank_p1,
-                cent_n1 = cent_data.cent_n1,
-                overallRank_n1 = cent_data.overallRank_n1,
-                cent_p2 = cent_data.cent_p2,
-                overallRank_p2 = cent_data.overallRank_p2,
-                cent_n2 = cent_data.cent_n2,
-                overallRank_n2 = cent_data.overallRank_n2,
-                cent_p3 = cent_data.cent_p3,
-                overallRank_p3 = cent_data.overallRank_p3,
-                cent_n3 = cent_data.cent_n3,
-                overallRank_n3 = cent_data.overallRank_n3,
-                cent_p4 = cent_data.cent_p4,
-                overallRank_p4 = cent_data.overallRank_p4,
-                cent_n4 = cent_data.cent_n4,
-                overallRank_n4 = cent_data.overallRank_n4,
-                cent_p5 = cent_data.cent_p5,
-                overallRank_p5 = cent_data.overallRank_p5,
-                cent_n5 = cent_data.cent_n5,
-                overallRank_n5 = cent_data.overallRank_n5,
-                cent_p6 = cent_data.cent_p6,
-                overallRank_p6 = cent_data.overallRank_p6,
-                cent_n6 = cent_data.cent_n6,
-                overallRank_n6 = cent_data.overallRank_n6,
-                cent_p7 = cent_data.cent_p7,
-                overallRank_p7 = cent_data.overallRank_p7,
-                cent_n7 = cent_data.cent_n7,
-                overallRank_n7 = cent_data.overallRank_n7,
-                cent_p8 = cent_data.cent_p8,
-                overallRank_p8 = cent_data.overallRank_p8,
-                cent_n8 = cent_data.cent_n8,
-                overallRank_n8 = cent_data.overallRank_n8,
-                cent_p9 = cent_data.cent_p9,
-                overallRank_p9 = cent_data.overallRank_p9,
-                cent_n9 = cent_data.cent_n9,
-                overallRank_n9 = cent_data.overallRank_n9,
-                cent_p10 = cent_data.cent_p10,
-                overallRank_p10 = cent_data.overallRank_p10,
-                cent_n10 = cent_data.cent_n10,
-                overallRank_n10 = cent_data.overallRank_n10
-            FROM cent_data
-            WHERE {self.summary_table_name}.timestamp = cent_data.timestamp
+
+        result_df = pd.concat([pos_df, neg_df])
+
+        cluster_summary_df = pd.merge(
+            cluster_summary_df,
+            result_df[['centroid', 'centDistLstCloseRank']],
+            on='centroid',
+            how='left'
+        )
+
+        self._set_fractal_timestamps(df['timestamp'].max(), df['timestamp'].min())
+
+        cluster_summary_df['mxTimestamp'] = self.mxTimestamp
+        cluster_summary_df['mnTimestamp'] = self.mnTimestamp
+
+        cluster_summary_df['k'] = self.cluster_count
+
+        result_data = {
+            'mxTimestamp': [self.mxTimestamp],
+            'mnTimestamp': [self.mnTimestamp]
+        }
+
+        pos_ranks = (cluster_summary_df[
+            cluster_summary_df['centDistLstCloseRank'] > 0
+        ].sort_values('centDistLstCloseRank'))
+        neg_ranks = (cluster_summary_df[
+            cluster_summary_df['centDistLstCloseRank'] < 0
+        ].sort_values('centDistLstCloseRank', ascending=False))
+
+        if not pos_ranks.empty:
+            max_pos_rank = pos_ranks['centDistLstCloseRank'].max()
+        else:
+            max_pos_rank = 0
+        if not neg_ranks.empty:
+            max_neg_rank = abs(neg_ranks['centDistLstCloseRank'].min())
+        else:
+            max_neg_rank = 0
+        max_rank = max(max_pos_rank, max_neg_rank)
+
+        for rank in range(1, int(max_rank) + 1):
+
+            pos_cluster = pos_ranks[
+                pos_ranks['centDistLstCloseRank'] == rank
+            ]
+            if not pos_cluster.empty:
+                result_data[f'cent_p{rank}'] = [pos_cluster.iloc[0]['centroid']]
+                result_data[f'overallRank_p{rank}'] = [
+                    pos_cluster.iloc[0]['overallRank']
+                ]
+            else:
+                result_data[f'cent_p{rank}'] = [None]
+                result_data[f'overallRank_p{rank}'] = [None]
+
+            neg_cluster = neg_ranks[
+                neg_ranks['centDistLstCloseRank'] == -rank
+            ]
+            if not neg_cluster.empty:
+                result_data[f'cent_n{rank}'] = [neg_cluster.iloc[0]['centroid']]
+                result_data[f'overallRank_n{rank}'] = [
+                    neg_cluster.iloc[0]['overallRank']
+                ]
+            else:
+                result_data[f'cent_n{rank}'] = [None]
+                result_data[f'overallRank_n{rank}'] = [None]
+
+        result_df = pd.DataFrame(result_data)
+
+        print("Cluster summary:")
+        print(cluster_summary_df)
+        print("\nRanked cluster summary:")
+        print(result_df)
+
+        self.result_df = result_df
+
+    def update_summary_table(self):
+        # Register the DataFrame as a temporary table
+        temp_table_name = f"temp_result_{self.mxTimestamp}"
+        self.con.register(temp_table_name, self.result_df)
+
+        self.con.sql(f"""
+            INSERT INTO {self.summary_table_name}
+            SELECT cent_p1, overallRank_p1, cent_n1, overallRank_n1,
+                   cent_p2, overallRank_p2, cent_n2, overallRank_n2,
+                   cent_p3, overallRank_p3, cent_n3, overallRank_n3,
+                   cent_p4, overallRank_p4, cent_n4, overallRank_n4,
+                   cent_p5, overallRank_p5, cent_n5, overallRank_n5,
+                   cent_p6, overallRank_p6, cent_n6, overallRank_n6,
+                   cent_p7, overallRank_p7, cent_n7, overallRank_n7,
+                   cent_p8, overallRank_p8, cent_n8, overallRank_n8,
+                   cent_p9, overallRank_p9, cent_n9, overallRank_n9,
+                   cent_p10, overallRank_p10, cent_n10, overallRank_n10
+            FROM {temp_table_name}
+            WHERE mxTimestamp = {self.mxTimestamp}
         """)
+
+        # Clean up the temporary table
+        self.con.sql(f"DROP TABLE IF EXISTS {temp_table_name}")
+
+    def process_fractal_timestamps(self):
+        """Main method to process fractal timestamps with increasing window size"""
+        fractal_timestamps = self.get_fractal_timestamps()
+
+        print(f"Found {len(fractal_timestamps)} fractal timestamps")
+
+        for i, (timestamp,) in enumerate(fractal_timestamps):
+
+            print(f"Timestamp: {timestamp}")
+            print(f"Window size: {self.max_bars}")
+            print(f"Window position: {self.window_position}")
+
+            self.set_window_position(i)
+            self.reset_table()
+            self.generate_cluster_data()
+            self.update_summary_table()

@@ -46,6 +46,7 @@ class Fractal(DataFoundationBuilder):
         """)
 
     def generate_fractal_data(self):
+        lookback_period = self.fractal_period * 2
 
         self.con.sql(f"""
             CREATE TABLE {self.working_table_name}_temp AS
@@ -69,9 +70,7 @@ class Fractal(DataFoundationBuilder):
                             ELSE close
                         END) OVER (
                             ORDER BY date
-                            ROWS BETWEEN {self.fractal_period}
-                                PRECEDING AND {self.fractal_period}
-                                FOLLOWING
+                            ROWS BETWEEN {lookback_period} PRECEDING AND 0 FOLLOWING
                         ) as window_max,
                         MIN(CASE
                             WHEN '{self.candle_price_point}' =
@@ -79,9 +78,7 @@ class Fractal(DataFoundationBuilder):
                             ELSE close
                         END) OVER (
                             ORDER BY date
-                            ROWS BETWEEN {self.fractal_period}
-                                PRECEDING AND {self.fractal_period}
-                                FOLLOWING
+                            ROWS BETWEEN {lookback_period} PRECEDING AND 0 FOLLOWING
                         ) as window_min,
                         CASE
                             WHEN '{self.candle_price_point}' =

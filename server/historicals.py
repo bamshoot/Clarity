@@ -22,14 +22,6 @@ class Historicals:
         self.db = db_connection
         self.timestamps_in_raw_not_in_summary = {}
 
-    def get_all_summary_timestamps(self, instrument, timeframe):
-        self.db.sql(f"""
-            SELECT ROW_NUMBER() OVER (ORDER BY timestamp DESC) - 1 as row_num,
-                   timestamp
-            FROM tbl_{self.params['data_source']}_{instrument}_{timeframe}_summary
-            ORDER BY timestamp DESC
-        """).fetchall()
-
     def build_source_prep(self):
         self.logger.logger.info("Starting - Source Prep")
         src_prep = SourcePrep(self.db)
@@ -119,8 +111,6 @@ class Historicals:
                 self.timestamps_in_raw_not_in_summary[f'{instrument}_{timeframe}'] = \
                     summary.get_timestamps_in_raw_not_in_summary()
 
-                print(self.timestamps_in_raw_not_in_summary)
-
                 summary.append_rows_to_summary_table()
 
         self.logger.logger.info("Finished - Summary")
@@ -128,10 +118,10 @@ class Historicals:
     def build_cluster(self):
         self.logger.logger.info("Starting - Cluster")
         cluster = Cluster(self.db,
-                          300,
-                          self.params["cluster_count"],
-                          self.params["outlier_threshold"],
-                          self.params["candle_price_point"])
+                          max_bars=300,
+                          cluster_count=self.params["cluster_count"],
+                          outlier_threshold=self.params["outlier_threshold"],
+                          candle_price_point=self.params["candle_price_point"])
         cluster.set_data_source(self.params["data_source"])
         cluster.set_output_folder("clusters")
 
@@ -140,48 +130,29 @@ class Historicals:
                 self.logger.logger.info(
                     f"Building Cluster - {instrument} {timeframe}")
 
-                for window_position, timestamp in \
-                        self.timestamps_in_raw_not_in_summary[f"{instrument}"
-                                                                f"_{timeframe}"]:
+                cluster.set_instrument_name(instrument)
+                cluster.set_timeframe(timeframe)
 
-                    print(f"{window_position}: {timestamp}")
+                cluster.set_source_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}_"
+                    f"f{self.params['fractal_period']}")
 
-                    cluster.set_instrument_name(instrument)
-                    cluster.set_timeframe(timeframe)
-                    cluster.set_fractal_period(self.params["fractal_period"])
+                cluster.set_working_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}_"
+                    f"k{self.params['cluster_count']}")
 
-                    cluster.set_source_table_name(
-                        f"tbl_{self.params['data_source']}_"
-                        f"{instrument}_"
-                        f"{timeframe}")
+                cluster.set_summary_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}_"
+                    f"summary")
 
-                    cluster.set_working_table_name(
-                        f"tbl_{self.params['data_source']}_"
-                        f"{instrument}_"
-                        f"{timeframe}_"
-                        f"f{self.params['fractal_period']}_"
-                        f"k{self.params['cluster_count']}")
-
-                    cluster.set_summary_table_name(
-                        f"tbl_{self.params['data_source']}_"
-                        f"{instrument}_"
-                        f"{timeframe}_"
-                        f"summary")
-
-                    cluster.add_columns_to_summary_table()
-                    cluster.set_threshold()
-                    cluster.set_window_position(window_position)
-                    cluster.reset_table()
-                    cluster.generate_input_data()
-                    cluster.generate_cluster_data()
-                    cluster.set_indicator_data()
-                    cluster.generate_cent_dist()
-                    cluster.remove_outliers()
-                    cluster.generate_cent_dist_lst_candle()
-                    cluster.generate_cent_count()
-                    cluster.generate_score()
-                    cluster.generate_rank()
-                    cluster.generate_historical_sr()
+                cluster.add_columns_to_summary_table()
+                cluster.process_fractal_timestamps()
 
         self.logger.logger.info("Finished - Cluster")
 
@@ -190,43 +161,58 @@ class Historicals:
         rsi = RSI(self.db)
         rsi.set_data_source(self.params["data_source"])
 
-        for timeframe in self.params["timeframes"]:
-            self.logger.logger.info(
-                f"Building RSI - {timeframe}")
-
-            rsi.set_timeframe(timeframe)
-
-            for instrument in self.params["instruments"]:
+        for instrument in self.params["instruments"]:
+            for timeframe in self.params["timeframes"]:
+                self.logger.logger.info(
+                    f"Building RSI - {instrument} {timeframe}")
                 rsi.set_instrument_name(instrument)
+                rsi.set_timeframe(timeframe)
                 rsi.set_working_table_name(
                     f"tbl_{self.params['data_source']}_"
                     f"{instrument}_"
                     f"{timeframe}_"
                     f"summary")
-                rsi.reset_rsi_data()
+                # rsi.reset_rsi_data()
+                self.timestamps_in_raw_not_in_summary[
+                    f"{instrument}_{timeframe}"] = rsi.get_all_summary_timestamps(
+                        instrument, timeframe)
 
-            timestamp_ref_table = f"{instrument}_{timeframe}"
+        # for timeframe in self.params["timeframes"]:
+        #     self.logger.logger.info(
+        #         f"Building RSI - {timeframe}")
 
-            self.timestamps_in_raw_not_in_summary = self.get_all_summary_timestamps(instrument, timeframe)
+        #     rsi.set_timeframe(timeframe)
 
-            for timestamp in self.timestamps_in_raw_not_in_summary[timestamp_ref_table]:
-                rsi.build_rsi_data(timestamp[1])
-                for instrument in self.params["instruments"]:
-                    self.logger.logger.info(
-                        f"Building RSI - {instrument} {timeframe} {timestamp[1]}")
-                    rsi.set_instrument_name(instrument)
-                    rsi.set_working_table_name(
-                        f"tbl_{self.params['data_source']}_"
-                        f"{instrument}_"
-                        f"{timeframe}_"
-                        f"summary")
-                    rsi.insert_rsi_data(instrument, timestamp[1])
+        #     for instrument in self.params["instruments"]:
+        #         rsi.set_instrument_name(instrument)
+        #         rsi.set_working_table_name(
+        #             f"tbl_{self.params['data_source']}_"
+        #             f"{instrument}_"
+        #             f"{timeframe}_"
+        #             f"summary")
+
+        #     timestamp_ref_table = f"{instrument}_{timeframe}"
+
+        #     for timestamp in self.timestamps_in_raw_not_in_summary[
+        #             timestamp_ref_table]:
+        #         rsi.build_rsi_data(timestamp[1])
+        #         for instrument in self.params["instruments"]:
+        #             self.logger.logger.info(
+        #                 f"Building RSI - {instrument} {timeframe} {timestamp[1]}")
+        #             rsi.set_instrument_name(instrument)
+        #             rsi.set_working_table_name(
+        #                 f"tbl_{self.params['data_source']}_"
+        #                 f"{instrument}_"
+        #                 f"{timeframe}_"
+        #                 f"summary")
+        #             rsi.insert_rsi_data(instrument, timestamp[1])
 
         self.logger.logger.info("Finished - RSI")
 
     def build_trend(self):
         self.logger.logger.info("Starting - Trends")
-        trend = Trend(self.db, self.trend_length_threshold, self.trends_status_rank)
+        trend = Trend(self.db, self.trend_length_threshold,
+                      self.trends_status_rank)
         trend.reset_params_table()
         trend.set_data_source(self.params["data_source"])
 
@@ -246,9 +232,11 @@ class Historicals:
 
                 timestamp_ref_table = f"{instrument}_{timeframe}"
 
-                for timestamp in self.timestamps_in_raw_not_in_summary[timestamp_ref_table]:
+                for timestamp in self.timestamps_in_raw_not_in_summary[
+                        timestamp_ref_table]:
                     self.logger.logger.info(
-                        f"Building Trends - {instrument} {timeframe} {timestamp[1]}")
+                        f"Building Trends - {instrument} {timeframe} "
+                        f"{timestamp[1]}")
                     trend.generate_trends(timestamp[1])
 
         self.logger.logger.info("Finished - Trends")
@@ -299,14 +287,15 @@ class Historicals:
 
                 timestamp_ref_table = f"{instrument}_{timeframe}"
 
-                for timestamp in self.timestamps_in_raw_not_in_summary[timestamp_ref_table]:
+                for timestamp in self.timestamps_in_raw_not_in_summary[
+                        timestamp_ref_table]:
                     self.logger.logger.info(
                         f"Building Candle Pattern - {instrument} {timeframe} "
                         f"{timestamp[1]}")
                     candle_pattern.reset_candle_pattern_last_n_rows()
                     candle_pattern.generate_candle_pattern_last_n_rows(
                             10, timestamp[1])
-                    candle_pattern.generate_candle_pattern_aggregated_data_for_timestamp(
+                    candle_pattern.generate_candle_pattern_agg_data_for_timestamp(
                         timestamp[1])
 
         self.logger.logger.info("Finished - Candle Pattern")
@@ -322,8 +311,8 @@ if __name__ == "__main__":
     # h.build_source_prep()
     # h.build_fractal()
     # h.build_summary()
-    # h.build_cluster()
-    h.build_rsi()
+    h.build_cluster()
+    # h.build_rsi()
     # h.build_trend()
     # h.build_candle_pattern()
 

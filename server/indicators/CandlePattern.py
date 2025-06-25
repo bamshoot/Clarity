@@ -55,7 +55,7 @@ class CandlePattern(DataFoundationBuilder):
             ADD COLUMN IF NOT EXISTS continuation INTEGER
             """)
 
-    def generate_candle_pattern_aggregated_data_for_timestamp(
+    def generate_candle_pattern_agg_data_for_timestamp(
             self, timestamp):
         """Generate aggregated candle pattern data for a timestamp"""
         # First, ensure we have the last n rows data

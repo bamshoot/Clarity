@@ -5,6 +5,14 @@ class RSI(DataFoundationBuilder):
     def __init__(self, db_connection):
         super().__init__(db_connection)
 
+    def get_all_summary_timestamps(self, instrument, timeframe):
+        return self.con.sql(f"""
+            SELECT ROW_NUMBER() OVER (ORDER BY timestamp DESC) - 1 as row_num,
+                   timestamp
+            FROM tbl_EOD_{instrument}_{timeframe}_summary
+            ORDER BY timestamp DESC
+        """).fetchall()
+
     def reset_rsi_data(self):
         self._drop_rsi_columns()
         self._add_rsi_columns()
