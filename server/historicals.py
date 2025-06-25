@@ -172,40 +172,40 @@ class Historicals:
                     f"{instrument}_"
                     f"{timeframe}_"
                     f"summary")
-                # rsi.reset_rsi_data()
+                rsi.reset_rsi_data()
                 self.timestamps_in_raw_not_in_summary[
                     f"{instrument}_{timeframe}"] = rsi.get_all_summary_timestamps(
                         instrument, timeframe)
 
-        # for timeframe in self.params["timeframes"]:
-        #     self.logger.logger.info(
-        #         f"Building RSI - {timeframe}")
+        for timeframe in self.params["timeframes"]:
+            self.logger.logger.info(
+                f"Building RSI - {timeframe}")
 
-        #     rsi.set_timeframe(timeframe)
+            rsi.set_timeframe(timeframe)
 
-        #     for instrument in self.params["instruments"]:
-        #         rsi.set_instrument_name(instrument)
-        #         rsi.set_working_table_name(
-        #             f"tbl_{self.params['data_source']}_"
-        #             f"{instrument}_"
-        #             f"{timeframe}_"
-        #             f"summary")
+            for instrument in self.params["instruments"]:
+                rsi.set_instrument_name(instrument)
+                rsi.set_working_table_name(
+                    f"tbl_{self.params['data_source']}_"
+                    f"{instrument}_"
+                    f"{timeframe}_"
+                    f"summary")
 
-        #     timestamp_ref_table = f"{instrument}_{timeframe}"
+            timestamp_ref_table = f"{instrument}_{timeframe}"
 
-        #     for timestamp in self.timestamps_in_raw_not_in_summary[
-        #             timestamp_ref_table]:
-        #         rsi.build_rsi_data(timestamp[1])
-        #         for instrument in self.params["instruments"]:
-        #             self.logger.logger.info(
-        #                 f"Building RSI - {instrument} {timeframe} {timestamp[1]}")
-        #             rsi.set_instrument_name(instrument)
-        #             rsi.set_working_table_name(
-        #                 f"tbl_{self.params['data_source']}_"
-        #                 f"{instrument}_"
-        #                 f"{timeframe}_"
-        #                 f"summary")
-        #             rsi.insert_rsi_data(instrument, timestamp[1])
+            for timestamp in self.timestamps_in_raw_not_in_summary[
+                    timestamp_ref_table]:
+                rsi.build_rsi_data(timestamp[1])
+                for instrument in self.params["instruments"]:
+                    self.logger.logger.info(
+                        f"Building RSI - {instrument} {timeframe} {timestamp[1]}")
+                    rsi.set_instrument_name(instrument)
+                    rsi.set_working_table_name(
+                        f"tbl_{self.params['data_source']}_"
+                        f"{instrument}_"
+                        f"{timeframe}_"
+                        f"summary")
+                    rsi.insert_rsi_data(instrument, timestamp[1])
 
         self.logger.logger.info("Finished - RSI")
 
@@ -311,8 +311,8 @@ if __name__ == "__main__":
     # h.build_source_prep()
     # h.build_fractal()
     # h.build_summary()
-    h.build_cluster()
-    # h.build_rsi()
+    # h.build_cluster()
+    h.build_rsi()
     # h.build_trend()
     # h.build_candle_pattern()
 

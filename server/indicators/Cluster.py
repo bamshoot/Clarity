@@ -25,6 +25,7 @@ class Cluster(DataFoundationBuilder):
         self.last_close = None
         self.mxTimestamp = None
         self.mnTimestamp = None
+        self.previous_mxTimestamp = None
         self.result_df = None
 
     def set_summary_table_name(self, summary_table_name: str):
@@ -40,6 +41,9 @@ class Cluster(DataFoundationBuilder):
     def _set_fractal_timestamps(self, mxTimestamp, mnTimestamp):
         self.mxTimestamp = mxTimestamp
         self.mnTimestamp = mnTimestamp
+
+    def _set_previous_mxTimestamp(self, mxTimestamp):
+        self.previous_mxTimestamp = mxTimestamp
 
     def set_window_position(self, index: int):
         self.window_position = index
@@ -115,8 +119,9 @@ class Cluster(DataFoundationBuilder):
             count = cluster_counts.get(cluster_id, 0)
             centDist = centroids[cluster_id] - close
             centDistAbs = abs(centroids[cluster_id] - close)
-            centDistMean = abs(centroids[cluster_id] - close) / count
-            centDistMeanInv = 1 / centDistMean
+            centDistMean = (abs(centroids[cluster_id] - close) / count
+                            if count > 0 else 0)
+            centDistMeanInv = 1 / centDistMean if centDistMean > 0 else 0
             centDistLstClose = centroids[cluster_id] - close
             score = count * centDistMeanInv
 
@@ -181,12 +186,17 @@ class Cluster(DataFoundationBuilder):
 
         result_df = pd.concat([pos_df, neg_df])
 
-        cluster_summary_df = pd.merge(
-            cluster_summary_df,
-            result_df[['centroid', 'centDistLstCloseRank']],
-            on='centroid',
-            how='left'
-        )
+        # Only merge if result_df has the required columns
+        if not result_df.empty and 'centDistLstCloseRank' in result_df.columns:
+            cluster_summary_df = pd.merge(
+                cluster_summary_df,
+                result_df[['centroid', 'centDistLstCloseRank']],
+                on='centroid',
+                how='left'
+            )
+        else:
+            # Add empty centDistLstCloseRank column if it doesn't exist
+            cluster_summary_df['centDistLstCloseRank'] = None
 
         self._set_fractal_timestamps(df['timestamp'].max(), df['timestamp'].min())
 
@@ -199,6 +209,13 @@ class Cluster(DataFoundationBuilder):
             'mxTimestamp': [self.mxTimestamp],
             'mnTimestamp': [self.mnTimestamp]
         }
+
+        # Initialize all columns with None values
+        for i in range(1, 11):
+            result_data[f'cent_p{i}'] = [None]
+            result_data[f'overallRank_p{i}'] = [None]
+            result_data[f'cent_n{i}'] = [None]
+            result_data[f'overallRank_n{i}'] = [None]
 
         pos_ranks = (cluster_summary_df[
             cluster_summary_df['centDistLstCloseRank'] > 0
@@ -218,69 +235,105 @@ class Cluster(DataFoundationBuilder):
         max_rank = max(max_pos_rank, max_neg_rank)
 
         for rank in range(1, int(max_rank) + 1):
-
-            pos_cluster = pos_ranks[
-                pos_ranks['centDistLstCloseRank'] == rank
-            ]
-            if not pos_cluster.empty:
-                result_data[f'cent_p{rank}'] = [pos_cluster.iloc[0]['centroid']]
-                result_data[f'overallRank_p{rank}'] = [
-                    pos_cluster.iloc[0]['overallRank']
+            if rank <= 10:  # Only process up to rank 10
+                pos_cluster = pos_ranks[
+                    pos_ranks['centDistLstCloseRank'] == rank
                 ]
-            else:
-                result_data[f'cent_p{rank}'] = [None]
-                result_data[f'overallRank_p{rank}'] = [None]
+                if not pos_cluster.empty:
+                    result_data[f'cent_p{rank}'] = [pos_cluster.iloc[0]['centroid']]
+                    result_data[f'overallRank_p{rank}'] = [
+                        pos_cluster.iloc[0]['overallRank']
+                    ]
 
-            neg_cluster = neg_ranks[
-                neg_ranks['centDistLstCloseRank'] == -rank
-            ]
-            if not neg_cluster.empty:
-                result_data[f'cent_n{rank}'] = [neg_cluster.iloc[0]['centroid']]
-                result_data[f'overallRank_n{rank}'] = [
-                    neg_cluster.iloc[0]['overallRank']
+                neg_cluster = neg_ranks[
+                    neg_ranks['centDistLstCloseRank'] == -rank
                 ]
-            else:
-                result_data[f'cent_n{rank}'] = [None]
-                result_data[f'overallRank_n{rank}'] = [None]
+                if not neg_cluster.empty:
+                    result_data[f'cent_n{rank}'] = [neg_cluster.iloc[0]['centroid']]
+                    result_data[f'overallRank_n{rank}'] = [
+                        neg_cluster.iloc[0]['overallRank']
+                    ]
 
         result_df = pd.DataFrame(result_data)
 
-        print("Cluster summary:")
-        print(cluster_summary_df)
-        print("\nRanked cluster summary:")
-        print(result_df)
+        # print("Cluster summary:")
+        # print(cluster_summary_df)
+        # print("\nRanked cluster summary:")
+        # print(result_df)
 
         self.result_df = result_df
+
+    def clear_summary_table(self):
+        self.con.sql(f"""
+            UPDATE {self.summary_table_name}
+            SET cent_p1 = NULL, overallRank_p1 = NULL,
+                cent_n1 = NULL, overallRank_n1 = NULL,
+                cent_p2 = NULL, overallRank_p2 = NULL,
+                cent_n2 = NULL, overallRank_n2 = NULL,
+                cent_p3 = NULL, overallRank_p3 = NULL,
+                cent_n3 = NULL, overallRank_n3 = NULL,
+                cent_p4 = NULL, overallRank_p4 = NULL,
+                cent_n4 = NULL, overallRank_n4 = NULL,
+                cent_p5 = NULL, overallRank_p5 = NULL,
+                cent_n5 = NULL, overallRank_n5 = NULL,
+                cent_p6 = NULL, overallRank_p6 = NULL,
+                cent_n6 = NULL, overallRank_n6 = NULL,
+                cent_p7 = NULL, overallRank_p7 = NULL,
+                cent_n7 = NULL, overallRank_n7 = NULL,
+                cent_p8 = NULL, overallRank_p8 = NULL,
+                cent_n8 = NULL, overallRank_n8 = NULL,
+                cent_p9 = NULL, overallRank_p9 = NULL,
+                cent_n9 = NULL, overallRank_n9 = NULL,
+                cent_p10 = NULL, overallRank_p10 = NULL,
+                cent_n10 = NULL, overallRank_n10 = NULL
+        """)
 
     def update_summary_table(self):
         # Register the DataFrame as a temporary table
         temp_table_name = f"temp_result_{self.mxTimestamp}"
         self.con.register(temp_table_name, self.result_df)
 
+        # Use UPDATE instead of INSERT to update existing rows
         self.con.sql(f"""
-            INSERT INTO {self.summary_table_name}
-            SELECT cent_p1, overallRank_p1, cent_n1, overallRank_n1,
-                   cent_p2, overallRank_p2, cent_n2, overallRank_n2,
-                   cent_p3, overallRank_p3, cent_n3, overallRank_n3,
-                   cent_p4, overallRank_p4, cent_n4, overallRank_n4,
-                   cent_p5, overallRank_p5, cent_n5, overallRank_n5,
-                   cent_p6, overallRank_p6, cent_n6, overallRank_n6,
-                   cent_p7, overallRank_p7, cent_n7, overallRank_n7,
-                   cent_p8, overallRank_p8, cent_n8, overallRank_n8,
-                   cent_p9, overallRank_p9, cent_n9, overallRank_n9,
-                   cent_p10, overallRank_p10, cent_n10, overallRank_n10
-            FROM {temp_table_name}
-            WHERE mxTimestamp = {self.mxTimestamp}
+            UPDATE {self.summary_table_name}
+            SET cent_p1 = t.cent_p1, overallRank_p1 = t.overallRank_p1,
+                cent_n1 = t.cent_n1, overallRank_n1 = t.overallRank_n1,
+                cent_p2 = t.cent_p2, overallRank_p2 = t.overallRank_p2,
+                cent_n2 = t.cent_n2, overallRank_n2 = t.overallRank_n2,
+                cent_p3 = t.cent_p3, overallRank_p3 = t.overallRank_p3,
+                cent_n3 = t.cent_n3, overallRank_n3 = t.overallRank_n3,
+                cent_p4 = t.cent_p4, overallRank_p4 = t.overallRank_p4,
+                cent_n4 = t.cent_n4, overallRank_n4 = t.overallRank_n4,
+                cent_p5 = t.cent_p5, overallRank_p5 = t.overallRank_p5,
+                cent_n5 = t.cent_n5, overallRank_n5 = t.overallRank_n5,
+                cent_p6 = t.cent_p6, overallRank_p6 = t.overallRank_p6,
+                cent_n6 = t.cent_n6, overallRank_n6 = t.overallRank_n6,
+                cent_p7 = t.cent_p7, overallRank_p7 = t.overallRank_p7,
+                cent_n7 = t.cent_n7, overallRank_n7 = t.overallRank_n7,
+                cent_p8 = t.cent_p8, overallRank_p8 = t.overallRank_p8,
+                cent_n8 = t.cent_n8, overallRank_n8 = t.overallRank_n8,
+                cent_p9 = t.cent_p9, overallRank_p9 = t.overallRank_p9,
+                cent_n9 = t.cent_n9, overallRank_n9 = t.overallRank_n9,
+                cent_p10 = t.cent_p10, overallRank_p10 = t.overallRank_p10,
+                cent_n10 = t.cent_n10, overallRank_n10 = t.overallRank_n10
+            FROM {temp_table_name} t
+            WHERE {self.summary_table_name}.timestamp > {self.previous_mxTimestamp}
+                AND {self.summary_table_name}.timestamp <= {self.mxTimestamp}
         """)
 
         # Clean up the temporary table
-        self.con.sql(f"DROP TABLE IF EXISTS {temp_table_name}")
+        self.con.sql(f"DROP VIEW IF EXISTS {temp_table_name}")
 
     def process_fractal_timestamps(self):
+
+        self.clear_summary_table()
         """Main method to process fractal timestamps with increasing window size"""
         fractal_timestamps = self.get_fractal_timestamps()
 
-        print(f"Found {len(fractal_timestamps)} fractal timestamps")
+        # print(f"Found {len(fractal_timestamps)} fractal timestamps")
+
+        self._set_previous_mxTimestamp(fractal_timestamps[self.max_bars-1][0])
+        # print(f"Previous mxTimestamp: {self.previous_mxTimestamp}")
 
         for i, (timestamp,) in enumerate(fractal_timestamps):
 
@@ -292,3 +345,5 @@ class Cluster(DataFoundationBuilder):
             self.reset_table()
             self.generate_cluster_data()
             self.update_summary_table()
+
+            self._set_previous_mxTimestamp(self.mxTimestamp)

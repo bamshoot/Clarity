@@ -5,7 +5,7 @@
         "EURGBP", "EURJPY", "EURAUD", "EURCHF", "EURCAD", "EURNZD", "GBPJPY",
         "GBPAUD", "GBPCHF", "GBPCAD", "GBPNZD", "AUDJPY", "AUDCHF", "AUDCAD",
         "AUDNZD", "CHFJPY", "CADJPY", "NZDJPY", "CADCHF", "NZDCHF", "NZDCAD"],
-    "timeframes": ["1h"],
+    "timeframes": ["1h", "d"],
     "max_bars": 730,
     "candle_price_point": "close",
     "fractal_period": 2,
