@@ -1,14 +1,14 @@
 {
     "data_source": "EOD",
     "instruments": [
-        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF", "USDCAD", "NZDUSD",
+        "EURUSD", "GBPUSD","USDJPY", "AUDUSD", "USDCHF", "USDCAD", "NZDUSD",
         "EURGBP", "EURJPY", "EURAUD", "EURCHF", "EURCAD", "EURNZD", "GBPJPY",
         "GBPAUD", "GBPCHF", "GBPCAD", "GBPNZD", "AUDJPY", "AUDCHF", "AUDCAD",
         "AUDNZD", "CHFJPY", "CADJPY", "NZDJPY", "CADCHF", "NZDCHF", "NZDCAD"],
-    "timeframes": ["d"],
+    "timeframes": ["1h", "d"],
     "max_bars": 730,
     "candle_price_point": "close",
-    "fractal_period": {"1h": [2, 8], "d": [2], "w": [2], "m": [2]},
+    "fractal_period": 2,
     "cluster_count": 10,
     "outlier_threshold": 0.02,
     "atr_threshold": 10,

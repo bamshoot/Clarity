@@ -47,3 +47,42 @@ class DataFoundationBuilder:
         self.con.sql(f"""
             SELECT * FROM {table_name}
         """).write_csv(f"outputs/{self.output_folder}/{table_name}.csv")
+
+    def get_missing_records(self, source_table: str = None,
+                            working_table: str = None,
+                            reference_field: str = "timestamp",
+                            trim_rows: int = 0) -> list[str]:
+
+        if not working_table:
+            raise ValueError("Working table must be specified")
+
+        if source_table:
+            working_subquery = f"SELECT timestamp FROM {working_table}"
+            if trim_rows > 0:
+                working_subquery += f" ORDER BY timestamp ASC OFFSET {trim_rows}"
+
+            return self.con.sql(f"""
+                SELECT timestamp
+                FROM {source_table}
+                WHERE timestamp NOT IN (
+                    {working_subquery}
+                )
+                ORDER BY timestamp ASC
+            """).fetchall()
+
+        else:
+            query = f"""
+                SELECT timestamp
+                FROM {working_table}
+                WHERE {reference_field} IS NULL
+            """
+            if trim_rows > 0:
+                query += f" ORDER BY timestamp ASC OFFSET {trim_rows}"
+            else:
+                query += " ORDER BY timestamp ASC"
+
+            result = self.con.sql(query).fetchall()
+
+            print(result)
+
+            return result

@@ -21,6 +21,7 @@ class Historicals:
         self.logger = Logger("historicals")
         self.db = db_connection
         self.timestamps_in_raw_not_in_summary = {}
+        self.timestamps_in_raw_with_no_trend_data = {}
 
     def build_source_prep(self):
         self.logger.logger.info("Starting - Source Prep")
@@ -106,7 +107,7 @@ class Historicals:
                     f"summary")
 
                 summary.create_summary_table()
-                summary.delete_all_rows()
+                # summary.delete_all_rows()
 
                 self.timestamps_in_raw_not_in_summary[f'{instrument}_{timeframe}'] = \
                     summary.get_timestamps_in_raw_not_in_summary()
@@ -230,14 +231,20 @@ class Historicals:
 
                 trend.reset_trends_fields_to_table()
 
-                timestamp_ref_table = f"{instrument}_{timeframe}"
+                missing_records = trend.get_missing_records(
+                    working_table=f"tbl_{self.params['data_source']}_"
+                                  f"{instrument}_"
+                                  f"{timeframe}_"
+                                  f"summary",
+                    reference_field="status",
+                    trim_rows=100
+                )
 
-                for timestamp in self.timestamps_in_raw_not_in_summary[
-                        timestamp_ref_table]:
+                for timestamp in missing_records:
                     self.logger.logger.info(
                         f"Building Trends - {instrument} {timeframe} "
-                        f"{timestamp[1]}")
-                    trend.generate_trends(timestamp[1])
+                        f"{timestamp[0]}")
+                    trend.generate_trends(timestamp[0])
 
         self.logger.logger.info("Finished - Trends")
 
@@ -283,20 +290,32 @@ class Historicals:
                     f"{timeframe}_"
                     f"summary")
 
-                candle_pattern.add_candle_pattern_fields_to_summary_table()
+                # candle_pattern.add_candle_pattern_fields_to_summary_table()
 
-                timestamp_ref_table = f"{instrument}_{timeframe}"
+                missing_records = candle_pattern.get_missing_records(
+                    source_table=None,
+                    working_table=(
+                        f"tbl_{self.params['data_source']}_"
+                        f"{instrument}_"
+                        f"{timeframe}_"
+                        f"summary"
+                    ),
+                    reference_field="reversal",
+                    trim_rows=0,
+                )
 
-                for timestamp in self.timestamps_in_raw_not_in_summary[
-                        timestamp_ref_table]:
+                # print(missing_records)
+
+                for ts_row in missing_records:
+                    ts_value = ts_row[0]
                     self.logger.logger.info(
                         f"Building Candle Pattern - {instrument} {timeframe} "
-                        f"{timestamp[1]}")
+                        f"{ts_value}")
                     candle_pattern.reset_candle_pattern_last_n_rows()
                     candle_pattern.generate_candle_pattern_last_n_rows(
-                            10, timestamp[1])
+                        10, ts_value)
                     candle_pattern.generate_candle_pattern_agg_data_for_timestamp(
-                        timestamp[1])
+                        ts_value)
 
         self.logger.logger.info("Finished - Candle Pattern")
 
@@ -312,9 +331,9 @@ if __name__ == "__main__":
     # h.build_fractal()
     # h.build_summary()
     # h.build_cluster()
-    h.build_rsi()
+    # h.build_rsi()
     # h.build_trend()
-    # h.build_candle_pattern()
+    h.build_candle_pattern()
 
     end_time = time.time()
     execution_time = end_time - start_time
