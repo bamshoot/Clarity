@@ -334,13 +334,13 @@ if __name__ == "__main__":
 
     h = Historicals(config, db)
 
-    # h.build_source_prep()
-    # h.build_summary()
-    # h.build_fractal()
+    h.build_source_prep()
+    h.build_summary()
+    h.build_fractal()
     h.build_cluster()
-    # h.build_rsi()
-    # h.build_trend()
-    # h.build_candle_pattern()
+    h.build_rsi()
+    h.build_trend()
+    h.build_candle_pattern()
 
     end_time = time.time()
     execution_time = end_time - start_time
