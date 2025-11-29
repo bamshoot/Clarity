@@ -8,12 +8,12 @@ from .DataFoundationBuilder import DataFoundationBuilder
 class Cluster(DataFoundationBuilder):
     def __init__(self,
                  db_connection,
-                 max_bars: int,
+                 max_fractals: int,
                  cluster_count: int,
                  outlier_threshold: float,
                  candle_price_point: str):
         super().__init__(db_connection)
-        self.max_bars = max_bars
+        self.max_fractals = max_fractals
         self.window_position = None
         self.timestamp = None
         self.date = None
@@ -47,46 +47,6 @@ class Cluster(DataFoundationBuilder):
 
     def set_window_position(self, index: int):
         self.window_position = index
-
-    def _create_cluster_table(self):
-
-        self.con.sql(f"""
-            CREATE TABLE {self.working_table_name} AS
-                SELECT *
-                FROM {self.source_table_name}
-        """)
-
-        self.con.sql(f"""
-            DELETE FROM {self.working_table_name}
-        """)
-
-        columns = [
-            'k INTEGER',
-            'o DOUBLE',
-            'lstClose DOUBLE',
-            'clust INTEGER',
-            'cent DOUBLE',
-            'centDist DOUBLE',
-            'centDistMean DOUBLE',
-            'centDistMeanInv DOUBLE',
-            'centDistLstClose DOUBLE',
-            'centCount DOUBLE',
-            'centDistMeanRank DOUBLE',
-            'centCountRank DOUBLE',
-            'centDistLstCloseRank DOUBLE',
-            'score DOUBLE',
-            'overallRank DOUBLE'
-        ]
-
-        for column_def in columns:
-            self.con.sql(f"""
-                ALTER TABLE {self.working_table_name}
-                ADD COLUMN {column_def}
-            """)
-
-    def reset_table(self):
-        self.drop_table(self.working_table_name)
-        self._create_cluster_table()
 
     def add_columns_to_summary_table(self):
         columns = []
@@ -140,49 +100,94 @@ class Cluster(DataFoundationBuilder):
 
         return pd.DataFrame(cluster_data)
 
-    def generate_cluster_data(self):
-        df = self.con.sql(f"""
-            SELECT *
-            FROM {self.source_table_name}
-            ORDER BY datetime ASC
-            LIMIT {self.max_bars}
-            OFFSET {self.window_position}
-        """).to_df()
+    def generate_cluster_data(self, target_timestamp: int = None):
+        if target_timestamp is not None:
+            # Simplified timestamp-based approach: get last N fractals up to
+            # target_timestamp
+            df = self.con.sql(f"""
+                SELECT *
+                FROM {self.source_table_name}
+                WHERE timestamp <= {target_timestamp}
+                ORDER BY datetime DESC
+                LIMIT {self.max_fractals}
+            """).to_df()
+            # Sort oldest to newest within the window
+            df = df.sort_values("datetime")
+        else:
+            # Backward compatibility: use OFFSET-based approach
+            # (for manual_trading_identification.py usage)
+            df = self.con.sql(f"""
+                SELECT *
+                FROM {self.source_table_name}
+                ORDER BY datetime ASC
+                LIMIT {self.max_fractals}
+                OFFSET {self.window_position}
+            """).to_df()
+
+        # Check if we have any data
+        if df.empty:
+            print(f"Warning: No fractals found for timestamp "
+                  f"{target_timestamp}")
+            self._set_fractal_timestamps(None, None)
+            self.result_df = None
+            return
 
         df = df[df[self.candle_price_point] <=
                 df[self.candle_price_point].quantile(0.95)]
         df = df[df[self.candle_price_point] >=
                 df[self.candle_price_point].quantile(0.05)]
 
+        # Check again after quantile filtering
+        if df.empty:
+            print(f"Warning: All fractals filtered out by quantiles for "
+                  f"timestamp {target_timestamp}")
+            self._set_fractal_timestamps(None, None)
+            self.result_df = None
+            return
+
+        # Ensure we have enough data points for clustering
+        if len(df) < self.cluster_count:
+            print(f"Warning: Only {len(df)} fractals available, need at "
+                  f"least {self.cluster_count} for clustering")
+            self._set_fractal_timestamps(None, None)
+            self.result_df = None
+            return
+
         clusters, centroids = kmeans1d.cluster(df[self.candle_price_point],
                                                self.cluster_count)
 
         close = df[self.candle_price_point].iloc[-1]
 
-        cluster_summary_df = self.create_cluster_summary_df(clusters, centroids, close)
+        cluster_summary_df = self.create_cluster_summary_df(
+            clusters, centroids, close
+        )
 
         cluster_summary_df['centDistMeanRank'] = (
-            cluster_summary_df['centDistMean'].rank(method='min', ascending=True)
+            cluster_summary_df['centDistMean'].rank(method='min',
+                                                    ascending=True)
         )
         cluster_summary_df['centCountRank'] = (
             cluster_summary_df['count'].rank(method='min', ascending=False)
         )
         cluster_summary_df['overallRank'] = (
-            cluster_summary_df['centDistMeanRank'] + cluster_summary_df['centCountRank']
+            cluster_summary_df['centDistMeanRank'] +
+            cluster_summary_df['centCountRank']
         ) / 2
 
-        pos_df = cluster_summary_df[cluster_summary_df['centDistLstClose'] > 0].copy()
-        neg_df = cluster_summary_df[cluster_summary_df['centDistLstClose'] < 0].copy()
+        pos_df = cluster_summary_df[
+            cluster_summary_df['centDistLstClose'] > 0
+        ].copy()
+        neg_df = cluster_summary_df[
+            cluster_summary_df['centDistLstClose'] < 0
+        ].copy()
 
         if not pos_df.empty:
-            pos_df['centDistLstCloseRank'] = pos_df['centDistLstClose'].abs().rank(
-                method='dense', ascending=True
-            )
+            pos_df['centDistLstCloseRank'] = pos_df['centDistLstClose'].abs(
+            ).rank(method='dense', ascending=True)
 
         if not neg_df.empty:
-            neg_df['centDistLstCloseRank'] = -neg_df['centDistLstClose'].abs().rank(
-                method='dense', ascending=True
-            )
+            neg_df['centDistLstCloseRank'] = -neg_df['centDistLstClose'].abs(
+            ).rank(method='dense', ascending=True)
 
         result_df = pd.concat([pos_df, neg_df])
 
@@ -198,7 +203,8 @@ class Cluster(DataFoundationBuilder):
             # Add empty centDistLstCloseRank column if it doesn't exist
             cluster_summary_df['centDistLstCloseRank'] = None
 
-        self._set_fractal_timestamps(df['timestamp'].max(), df['timestamp'].min())
+        self._set_fractal_timestamps(df['timestamp'].max(),
+                                     df['timestamp'].min())
 
         cluster_summary_df['mxTimestamp'] = self.mxTimestamp
         cluster_summary_df['mnTimestamp'] = self.mnTimestamp
@@ -240,7 +246,9 @@ class Cluster(DataFoundationBuilder):
                     pos_ranks['centDistLstCloseRank'] == rank
                 ]
                 if not pos_cluster.empty:
-                    result_data[f'cent_p{rank}'] = [pos_cluster.iloc[0]['centroid']]
+                    result_data[f'cent_p{rank}'] = [
+                        pos_cluster.iloc[0]['centroid']
+                    ]
                     result_data[f'overallRank_p{rank}'] = [
                         pos_cluster.iloc[0]['overallRank']
                     ]
@@ -249,19 +257,14 @@ class Cluster(DataFoundationBuilder):
                     neg_ranks['centDistLstCloseRank'] == -rank
                 ]
                 if not neg_cluster.empty:
-                    result_data[f'cent_n{rank}'] = [neg_cluster.iloc[0]['centroid']]
+                    result_data[f'cent_n{rank}'] = [
+                        neg_cluster.iloc[0]['centroid']
+                    ]
                     result_data[f'overallRank_n{rank}'] = [
                         neg_cluster.iloc[0]['overallRank']
                     ]
 
-        result_df = pd.DataFrame(result_data)
-
-        # print("Cluster summary:")
-        # print(cluster_summary_df)
-        # print("\nRanked cluster summary:")
-        # print(result_df)
-
-        self.result_df = result_df
+        self.result_df = pd.DataFrame(result_data)
 
     def clear_summary_table(self):
         self.con.sql(f"""
@@ -324,26 +327,39 @@ class Cluster(DataFoundationBuilder):
         # Clean up the temporary table
         self.con.sql(f"DROP VIEW IF EXISTS {temp_table_name}")
 
-    def process_fractal_timestamps(self):
+    def process_fractal_timestamps(self, missing_records: list):
 
-        self.clear_summary_table()
-        """Main method to process fractal timestamps with increasing window size"""
-        fractal_timestamps = self.get_fractal_timestamps()
+        # self.clear_summary_table()
+        # Extract and sort timestamps to process in order
+        timestamps = sorted([ts_row[0] for ts_row in missing_records])
 
-        # print(f"Found {len(fractal_timestamps)} fractal timestamps")
+        if not timestamps:
+            return
 
-        self._set_previous_mxTimestamp(fractal_timestamps[self.max_bars-1][0])
-        # print(f"Previous mxTimestamp: {self.previous_mxTimestamp}")
+        # Initialize previous timestamp for first iteration
+        previous_ts = timestamps[0] - 1
 
-        for i, (timestamp,) in enumerate(fractal_timestamps):
+        for timestamp in timestamps:
+            print(f"""Instrument: {self.instrument_name}, """
+                  f"""Timeframe: {self.timeframe}, """
+                  f"""Processing timestamp: {timestamp}, """
+                  f"""Previous timestamp: {previous_ts}""")
+            # Set previous_mxTimestamp for update_summary_table range
+            self._set_previous_mxTimestamp(previous_ts)
 
-            print(f"Timestamp: {timestamp}")
-            print(f"Window size: {self.max_bars}")
-            print(f"Window position: {self.window_position}")
+            # Generate cluster data using timestamp-based window
+            # This gets up to max_fractals most recent fractals ending at
+            # this timestamp
+            self.generate_cluster_data(target_timestamp=timestamp)
 
-            self.set_window_position(i)
-            self.reset_table()
-            self.generate_cluster_data()
+            # Skip update if no data was generated
+            if self.result_df is None or self.mxTimestamp is None:
+                print(f"Skipping timestamp {timestamp} - no cluster data "
+                      f"generated")
+                continue
+
+            # Update summary table for rows in (previous_ts, timestamp]
             self.update_summary_table()
 
-            self._set_previous_mxTimestamp(self.mxTimestamp)
+            # Next iteration will use this timestamp as the previous max
+            previous_ts = self.mxTimestamp

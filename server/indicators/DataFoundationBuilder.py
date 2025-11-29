@@ -50,7 +50,7 @@ class DataFoundationBuilder:
 
     def get_missing_records(self, source_table: str = None,
                             working_table: str = None,
-                            reference_field: str = "timestamp",
+                            reference_fields: list[str] = ["timestamp"],
                             trim_rows: int = 0) -> list[str]:
 
         if not working_table:
@@ -71,10 +71,14 @@ class DataFoundationBuilder:
             """).fetchall()
 
         else:
+            reference_conditions = " AND ".join(
+                [f"{field} IS NULL" for field in reference_fields]
+            )
+
             query = f"""
                 SELECT timestamp
                 FROM {working_table}
-                WHERE {reference_field} IS NULL
+                WHERE {reference_conditions}
             """
             if trim_rows > 0:
                 query += f" ORDER BY timestamp ASC OFFSET {trim_rows}"
