@@ -46,7 +46,6 @@ class DB:
             except Exception as e:
                 print(f"DB close error: {e}")
             DB._connection = None
-        DB._instance = None
 
     def __enter__(self):
         self.connect()
