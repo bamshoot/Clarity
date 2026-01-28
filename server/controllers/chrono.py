@@ -159,7 +159,7 @@ class EODDataCollectionChrono(Chrono):
         db: DB,
         schedule_hour: int = 1,
         schedule_minute: int = 30,
-        manual_trading=None
+        historicals=None
     ):
         """
         Asynchronous DataCollectionChrono for collecting EOD data.
@@ -179,7 +179,7 @@ class EODDataCollectionChrono(Chrono):
             db=db,
         )
         self.data_service = data_service
-        self.manual_trading = manual_trading
+        self.historicals = historicals
         self.instruments = config.EOD_INSTRUMENTS["cross_rates"]
         self.periods = config.EOD_INSTRUMENTS["periods"]
         self.prefix = "tbl_EOD"
@@ -333,11 +333,11 @@ class EODDataCollectionChrono(Chrono):
             except Exception as e:
                 self.logger.logger.error(f"Error processing {table_name}: {str(e)}")
 
-        # if self.manual_trading:
-        #     print("Running manual trading identification")
-        #     await self.manual_trading.run_analysis()
-        # else:
-        #     self.logger.logger.warning("ManualTradingIdentification not initialized")
+        if self.historicals:
+            print("Running historicals")
+            await self.historicals.run_historicals()
+        else:
+            self.logger.logger.warning("Historicals not initialized")
 
         self.logger.logger.info(f"Task {self.name} executed successfully")
         self.logger.logger.info(

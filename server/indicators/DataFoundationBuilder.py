@@ -19,6 +19,11 @@ class DataFoundationBuilder:
     def get_table_from_db(self, table_name: str):
         return self.con.sql(f"SELECT * FROM {table_name}")
 
+    def get_column_names(self, table_name: str):
+        query = (f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                 f"WHERE TABLE_NAME = '{table_name}'")
+        return self.con.sql(query).fetchall()
+
     def drop_table(self, table_name: str):
         self.con.execute(f"DROP TABLE IF EXISTS {table_name}")
 
@@ -71,6 +76,7 @@ class DataFoundationBuilder:
             """).fetchall()
 
         else:
+
             reference_conditions = " AND ".join(
                 [f"{field} IS NULL" for field in reference_fields]
             )

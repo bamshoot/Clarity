@@ -7,8 +7,7 @@ from .controllers.chrono import EODDataCollectionChrono
 from contextlib import asynccontextmanager
 from .services.eod_data import EODData
 from .database.db import DB
-from .services.manual_trading_identification import ManualTradingIdentification
-
+from .services.historicals import Historicals
 config = Config()
 
 
@@ -26,7 +25,7 @@ async def lifespan(app: FastAPI):
         db_connection=db_connection
     )
 
-    app.state.manual_trading = ManualTradingIdentification(
+    app.state.historicals = Historicals(
         config=config,
         eod_data_service=eod_data_service,
         db_connection=app.state.db
@@ -38,7 +37,7 @@ async def lifespan(app: FastAPI):
         db=app.state.db,
         schedule_hour=0,
         schedule_minute=23,
-        manual_trading=app.state.manual_trading
+        historicals=app.state.historicals
     )
 
     await app.state.data_collection_chrono.start()

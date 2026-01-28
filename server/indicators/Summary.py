@@ -13,6 +13,129 @@ class Summary(DataFoundationBuilder):
                 {self.source_table_name}
         """)
 
+    def add_columns_ensure_correct_types(self):
+
+        big_int_columns = [
+            "timestamp"
+        ]
+
+        int_columns = [
+            "gmtoffset",
+            "idx",
+            "reversal",
+            "indecisive",
+            "continuation",
+            "rsi_rank"
+        ]
+
+        timestamp_columns = [
+            "datetime",
+            "date"
+        ]
+
+        double_columns = [
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "adjusted_close",
+            "lstCandlePrice",
+            "distLstCandle",
+            "ema20",
+            "ema50",
+            "atr14",
+            "rsi14",
+            "macd_12_26_9",
+            "sma9",
+            "sma20",
+            "sma50",
+            "cent_p1",
+            "overallRank_p1",
+            "cent_n1",
+            "overallRank_n1",
+            "cent_p2",
+            "overallRank_p2",
+            "cent_n2",
+            "overallRank_n2",
+            "cent_p3",
+            "overallRank_p3",
+            "cent_n3",
+            "overallRank_n3",
+            "cent_p4",
+            "overallRank_p4",
+            "cent_n4",
+            "overallRank_n4",
+            "cent_p5",
+            "overallRank_p5",
+            "cent_n5",
+            "overallRank_n5",
+            "cent_p6",
+            "overallRank_p6",
+            "cent_n6",
+            "overallRank_n6",
+            "cent_p7",
+            "overallRank_p7",
+            "cent_n7",
+            "overallRank_n7",
+            "cent_p8",
+            "overallRank_p8",
+            "cent_n8",
+            "overallRank_n8",
+            "cent_p9",
+            "overallRank_p9",
+            "cent_n9",
+            "overallRank_n9",
+            "cent_p10",
+            "overallRank_p10",
+            "cent_n10",
+            "overallRank_n10",
+            "rsi_diff",
+            "major_trend_slope_value",
+            "trend_slope_value",
+            "run_slope_value"
+        ]
+
+        varchar_columns = [
+            "rsi_status",
+            "major_trend_slope_type",
+            "trend_slope_type",
+            "run_slope_type",
+            "major_trend_to_trend",
+            "trend_to_run",
+            "status",
+            "bias",
+            "objective_status",
+            "rank_bias",
+            "rank_major_trend_to_trend",
+            "rank_trend_to_run",
+            "overall_rank"
+        ]
+
+        db_types = ["BIGINT", "INTEGER", "TIMESTAMP", "DOUBLE", "VARCHAR"]
+
+        for types, db_type in zip(
+            [big_int_columns,
+             int_columns,
+             timestamp_columns,
+             double_columns,
+             varchar_columns],
+            db_types
+        ):
+
+            for column in types:
+                print(f"Adding column {column} with type {db_type}")
+                self.con.sql(f"""
+                    ALTER TABLE {self.working_table_name}
+                    ADD COLUMN IF NOT EXISTS {column} {db_type}
+                """)
+
+                print(f"Altering column {column} to type {db_type}")
+                self.con.sql(f"""
+                    ALTER TABLE {self.working_table_name}
+                    ALTER COLUMN {column} SET DATA TYPE {db_type}
+                """)
+
     def get_column_names(self, table_name: str):
         result = self.con.sql(f"""
             SELECT COLUMN_NAME
